@@ -1,0 +1,66 @@
+{
+  "law_id": "TX_HSC_183_ENFORCEMENT",
+  "jurisdiction": "TX",
+  "citation": "Texas Health & Safety Code §§183.009–183.012",
+  "act": "SB 1188 (Chapter 183, Electronic Health Records)",
+  "effective_date": "2025-09-01",
+  "status": "active",
+  "law_type": "enforcement",
+
+  "enforcement": {
+    "investigation": {
+      "required_on_credible_allegation": true,
+      "conducted_by": ["commission", "appropriate_regulatory_agency"],
+      "compliance_required": ["HIPAA", "other_applicable_state_and_federal_law"],
+      "citation": "§183.009"
+    },
+
+    "disciplinary_action": {
+      "enabled": true,
+      "threshold": "three_or_more_violations_in_same_manner",
+      "actor": "appropriate_regulatory_agency",
+      "treated_as": "violation_of_applicable_licensing_or_regulatory_law",
+      "possible_actions": ["suspension", "revocation"],
+      "duration": "as_determined_appropriate_by_agency",
+      "citation": "§183.010"
+    },
+
+    "injunctive_relief": {
+      "enabled": true,
+      "actor": "Texas Attorney General",
+      "purpose": "restrain_a_violation",
+      "citation": "§183.011(a)"
+    },
+
+    "civil_penalties": {
+      "enabled": true,
+      "actor": "Texas Attorney General",
+      "caps_usd": {
+        "negligent_single_year": 5000,
+        "knowing_or_intentional_single_year": 25000,
+        "knowing_or_intentional_phi_for_financial_gain": 250000
+      },
+      "notes": [
+        "Caps apply per violation that occurs in a single year, regardless of how long the violation continues during that year."
+      ],
+      "citation": "§183.011(b)"
+    },
+
+    "implementation": {
+      "mou_required": true,
+      "participants": [
+        "executive_commissioner",
+        "Texas Medical Board",
+        "Texas Department of Licensing and Regulation",
+        "Texas Department of Insurance",
+        "each regulatory agency subject to chapter"
+      ],
+      "rules_authorized": true,
+      "citation": "§183.012"
+    }
+  },
+
+  "notes": [
+    "No private right of action is stated in Chapter 183; enforcement is via investigation/regulatory discipline and AG injunction/civil penalties."
+  ]
+}

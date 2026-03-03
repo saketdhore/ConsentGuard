@@ -1,0 +1,48 @@
+{
+  "law_id": "TX_BCC_552_ENFORCEMENT",
+  "jurisdiction": "TX",
+  "citation": "Texas Business & Commerce Code §§552.101–552.106",
+  "act": "HB 149 (Texas Responsible Artificial Intelligence Governance Act)",
+  "effective_date": "2026-01-01",
+  "status": "active",
+  "law_type": "enforcement",
+
+  "enforcement": {
+    "primary_enforcer": "Texas Attorney General",
+    "private_right_of_action": false,
+    "complaints_mechanism_required": true,
+    "complaints_mechanism_deadline": "2026-09-01",
+
+    "notice_and_cure": {
+      "notice_required": true,
+      "cure_period_days": 60,
+      "cure_requires": [
+        "cure_identified_violation",
+        "written_statement_of_cure",
+        "supporting_documentation",
+        "policy_changes_to_prevent_recurrence"
+      ]
+    },
+
+    "civil_penalties": {
+      "curable_violation_range_usd": [10000, 12000],
+      "uncurable_violation_range_usd": [80000, 200000],
+      "continued_violation_per_day_range_usd": [2000, 40000]
+    },
+
+    "remedies": ["injunction", "attorneys_fees", "court_costs", "investigative_expenses"],
+
+    "defenses_and_safe_harbors": [
+      "no_liability_if_third_party_misuse",
+      "no_liability_if_discovered_via_feedback_or_testing_or_guidelines_or_internal_review",
+      "rebuttable_presumption_reasonable_care",
+      "substantial_compliance_with_nist_ai_rmf_genai_profile_or_similar_framework_may_support_defense",
+      "no_penalty_action_if_system_not_deployed"
+    ],
+
+    "agency_sanctions": {
+      "available_if_ag_finding_and_recommendation": true,
+      "sanctions": ["suspension", "probation", "revocation", "monetary_penalty_up_to_100000"]
+    }
+  }
+}

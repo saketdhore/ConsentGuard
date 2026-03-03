@@ -1,0 +1,45 @@
+{
+  "law_id": "TX_BCC_552_052",
+  "jurisdiction": "TX",
+  "citation": "Texas Business & Commerce Code §552.052",
+  "act": "HB 149",
+  "effective_date": "2026-01-01",
+  "status": "active",
+  "law_type": "ai_prohibition",
+
+  "triggers": {
+    "mental_health_patient_facing_ai": {
+      "description": "Mental health domain + patient-facing AI interaction (proxy for intent risk)",
+      "all_of": [
+        { "field": "jurisdiction", "op": "==", "value": "TX" },
+        { "field": "clinical_domain", "op": "==", "value": "mental_health" },
+        { "field": "primary_user", "op": "contains", "value": "patient" }
+      ],
+      "trigger_mode": "proxy",
+      "legal_note": "§552.052 is intent-based. This tool uses mental health + patient-facing deployment as a high-risk proxy."
+    }
+  },
+
+  "prohibitions": [
+    {
+      "prohibition_id": "NO_SELF_HARM_INDUCEMENT",
+      "applies_when": ["mental_health_patient_facing_ai"],
+      "type": "ban",
+      "text": "May not develop or deploy an AI system in a manner that intentionally aims to incite or encourage a person to commit physical self-harm, including suicide."
+    },
+    {
+      "prohibition_id": "NO_HARM_TO_OTHERS_INDUCEMENT",
+      "applies_when": ["mental_health_patient_facing_ai"],
+      "type": "ban",
+      "text": "May not develop or deploy an AI system in a manner that intentionally aims to incite or encourage a person to harm another person."
+    },
+    {
+      "prohibition_id": "NO_CRIMINAL_ACTIVITY_INDUCEMENT",
+      "applies_when": ["mental_health_patient_facing_ai"],
+      "type": "ban",
+      "text": "May not develop or deploy an AI system in a manner that intentionally aims to incite or encourage a person to engage in criminal activity."
+    }
+  ],
+
+  "enforcement_ref": ["TX_BCC_552_ENFORCEMENT"]
+}

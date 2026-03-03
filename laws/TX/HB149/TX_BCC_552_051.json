@@ -1,0 +1,77 @@
+{
+  "law_id": "TX_BCC_552_051",
+  "jurisdiction": "TX",
+  "citation": "Texas Business & Commerce Code §552.051",
+  "act": "HB 149",
+  "effective_date": "2026-01-01",
+  "status": "active",
+  "law_type": "ai_disclosure",
+
+  "triggers": {
+    "consumer_interaction": {
+      "description": "AI system intended to interact with consumers",
+      "all_of": [
+        { "field": "primary_user", "op": "contains", "value": "patient" }
+      ]
+    },
+
+    "healthcare_service_or_treatment": {
+      "description": "AI system used in relation to healthcare service or treatment",
+      "any_of": [
+        {
+          "field": "function_category",
+          "op": "in",
+          "value": [
+            "clinical_decision_support",
+            "medical_imaging_analysis",
+            "triage_risk_scoring",
+            "treatment_support",
+            "clinical_documentation",
+            "remote_patient_monitoring"
+          ]
+        },
+        {
+          "field": "decision_type",
+          "op": "in",
+          "value": [
+            "diagnosis",
+            "treatment",
+            "triage",
+            "monitoring_alert"
+          ]
+        }
+      ]
+    }
+  },
+
+  "obligations": [
+    {
+      "obligation_id": "DISCLOSE_AI_INTERACTION",
+      "applies_when": ["consumer_interaction"],
+      "type": "disclosure",
+      "required": true,
+      "timing": "before_or_at_time_of_interaction",
+      "content": "Disclose that the consumer is interacting with an artificial intelligence system."
+    },
+    {
+      "obligation_id": "DISCLOSURE_QUALITY",
+      "applies_when": ["consumer_interaction"],
+      "type": "format_requirement",
+      "required": true,
+      "requirements": [
+        "clear_and_conspicuous",
+        "plain_language",
+        "no_dark_patterns"
+      ]
+    },
+    {
+      "obligation_id": "HEALTHCARE_TIMING_RULE",
+      "applies_when": ["healthcare_service_or_treatment"],
+      "type": "timing_requirement",
+      "required": true,
+      "timing": "no_later_than_first_date_of_service"
+    }
+  ],
+
+  "enforcement_ref": ["TX_BCC_552_ENFORCEMENT"]
+}
