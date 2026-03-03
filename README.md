@@ -9,11 +9,11 @@
 - Open your command line interface (CLI).
 - Navigate to the root directory of the project:
   ```bash
-  cd path/to/ConsentGuard
+  cd ConsentGuard
   ```
 - Create a virtual environment with the following command:
   ```bash
-  python -m venv venv
+  python3 -m venv venv
   ```
 
 ## 3. How to Activate the Virtual Environment
