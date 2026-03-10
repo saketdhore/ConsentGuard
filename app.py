@@ -279,22 +279,31 @@ if view == "landing":
     st.markdown(
         f"""
         <style>
-        .stApp {{ background: #ffffff; }}
+        .stApp {{ background: {BG_CREAM}; min-height: 100vh; display: flex; flex-direction: column; }}
         section[data-testid="stSidebar"] {{ display: none; }}
         header[data-testid="stHeader"] {{ display: none; }}
-        /* Landing: card at 60% width, centered horizontally and vertically */
-        .stApp {{ min-height: 100vh; display: flex; flex-direction: column; }}
-        .stApp > div {{ flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }}
-        .block-container {{
+        /* Chain flex centering so stMainBlockContainer is centered on page (every wrapper participates) */
+        .stApp > div {{ flex: 1; display: flex !important; align-items: center !important; justify-content: center !important; min-height: 0; }}
+        .stApp > div > div {{ flex: 1; display: flex !important; align-items: center !important; justify-content: center !important; min-height: 0; }}
+        .stApp > div > div > div {{ flex: 1; display: flex !important; align-items: center !important; justify-content: center !important; min-height: 0; }}
+        .stApp section {{ flex: 1; display: flex !important; align-items: center !important; justify-content: center !important; min-height: 0; }}
+        [data-testid="stMainBlockContainer"] {{
             max-width: 60%;
             width: 60%;
+            height: 80vh;
             margin: 0 auto;
-            padding: calc(50vh - 220px) 2rem 2.5rem 2rem;
+            padding: 2rem;
             background: #ffffff;
             border-radius: 16px;
             box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
         }}
+        [data-testid="stMainBlockContainer"] #consent-guard {{ text-align: center; }}
+        [data-testid="stMainBlockContainer"] .stButton {{ display: flex; justify-content: center; }}
         .stButton > button[kind="primary"] {{
             background: {BLUE_CTA} !important;
             color: white !important;
@@ -325,25 +334,30 @@ else:
     st.markdown(
         f"""
         <style>
+        @keyframes overlayFadeIn {{
+            from {{ opacity: 0; transform: translateY(20px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
         /* No gray bar: hide Streamlit header */
         header[data-testid="stHeader"] {{ display: none; }}
         section[data-testid="stSidebar"] {{ display: none; }}
-        /* Page background white; cream only on the content overlay */
-        .stApp {{ background: #ffffff; }}
-        /* Wizard: 60% width overlay with cream background (progress + questions) */
+        /* Question pages: cream background (same as home), white overlay */
+        .stApp {{ background: {BG_CREAM}; }}
+        /* Wizard: single white overlay, 75% width, rounded corners, entrance animation */
         .block-container {{
             padding: 2rem 1rem;
-            max-width: 60%;
+            max-width: 75%;
             margin: 0 auto;
-            background: {BG_CREAM};
-            border-radius: 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            animation: overlayFadeIn 0.45s ease-out;
         }}
         /* Progress nav: no rounded edges, clear right border (line between nav and content) */
         .block-container > div > div:first-child {{
             background: {SIDEBAR_BG};
             padding: 1rem 0.75rem 0 0.75rem;
-            border-radius: 0;
+            border-radius: 12px 0 0 12px;
             border-right: 2px solid #c4c4c4;
         }}
         /* Nav bar: connected buttons, no rounded edges, clean lines */
@@ -368,10 +382,10 @@ else:
         .block-container > div > div:first-child .stButton > button:hover {{
             background: #e5e7eb;
         }}
-        /* Main content column */
+        /* Main content column (already white, match overlay) */
         .block-container > div > div:nth-child(2) {{
             background: #ffffff;
-            border-radius: 0;
+            border-radius: 0 12px 12px 0;
             box-shadow: none;
             padding: 2rem;
         }}
@@ -441,7 +455,7 @@ def on_jump_to_step():
 # ---------- Landing ----------
 if view == "landing":
     with st.container():
-        st.title("ConsentGuard")
+        st.markdown('<h1 id="consent-guard">ConsentGuard</h1>', unsafe_allow_html=True)
         st.markdown(
             "<p style='font-size: 1.15rem; color: #6b7280; margin-top: 0.5rem;'>Start drafting your consent form.</p>",
             unsafe_allow_html=True,
