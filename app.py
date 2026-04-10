@@ -1,11 +1,28 @@
 # app.py
+import os
 import streamlit as st
 
+from engine.config import load_env_file
 from engine.engine import evaluate
+from engine.schemas import (
+    CaseFactsSchema,
+    DerivedFactsSchema,
+    EvaluationItemKindEnum,
+    EvaluationItemSchema,
+    EvaluationResultSchema,
+    FormatConstraintEnum,
+)
+from engine.services import (
+    DocumentGenerationError,
+    build_consent_document_brief,
+    generate_document_from_brief,
+    validate_generated_document,
+)
+
+load_env_file()
 
 # ---------- Config ----------
-LAWS_DIR = "laws/TX"              # loader is recursive
-ENFORCEMENT_DIR = "laws/TX/enforcement"
+LAWS_ROOT = "laws"
 
 # ---------- Wizard steps ----------
 TOTAL_STEPS = 12   # 11 form steps (step 1 = jurisdiction+entity) + 1 review
@@ -26,19 +43,9 @@ STEP_KEYWORDS = [
 ]
 
 # ---------- Canonical enum options (DO NOT change these) ----------
-JURISDICTION = ["TX"]
+JURISDICTION = ["CA", "IL", "TX", "CO", "UT"]
 
-ENTITY = [
-    "health_facility",
-    "clinic",
-    "physicians_office",
-    "group_practice",
-    "health_system",
-    "telehealth",
-    "ai_vendor",
-    "research_institution",
-    "consumer_app",
-]
+ENTITY = ["licensed", "unlicensed", "not_sure"]
 
 FUNCTION_CATEGORY = [
     "patient_communication_genAI",
@@ -61,12 +68,9 @@ CONTENT_TYPE = [
 CLINICAL_DOMAIN = [
     "general_health",
     "mental_health",
-    "chronic_disease",
-    "acute_care",
     "emergency_care",
-    "reproductive_health",
-    "pediatric_care",
-    "other",
+    "wellness_care_coordination",
+    "specialty_care",
 ]
 
 PRIMARY_USER = [
@@ -78,7 +82,7 @@ PRIMARY_USER = [
     "internal_team",
 ]
 
-HUMAN_LICENSED_REVIEW = ["yes_all_outputs", "yes_some_outputs", "no"]
+HUMAN_LICENSED_REVIEW = ["yes", "no"]
 
 COMMUNICATION_CHANNEL = [
     "chatbot",
@@ -89,22 +93,24 @@ COMMUNICATION_CHANNEL = [
     "in_person_support",
 ]
 
-AI_ROLE = ["none", "assistive", "substantial_factor", "autonomous"]
+AI_ROLE = ["assistive", "substantial_factor", "autonomous"]
 
 DECISION_TYPE = [
     "diagnosis",
-    "treatment",
     "triage",
-    "eligibility_access",
+    "treatment",
     "monitoring_alert",
     "documentation",
     "administrative",
-    "other",
 ]
 
-INDEPENDENT_EVAL = ["yes", "partially", "no"]
+INDEPENDENT_EVAL = ["yes", "no"]
 
-MODEL_CHANGES = ["static", "periodic_updates", "continous_learning"]
+SENSITIVE_INFORMATION = ["yes", "no"]
+
+MODEL_CHANGES = ["static", "periodic_updates", "continuous_learning"]
+
+FORMAT_CONSTRAINT_VALUES = {item.value for item in FormatConstraintEnum}
 
 
 # ---------- Pretty label helpers ----------
@@ -134,7 +140,6 @@ FUNCTION_OVERRIDES = {
 }
 
 AI_ROLE_OVERRIDES = {
-    "none": "None (no AI used)",
     "assistive": "Assistive (human reviews + decides)",
     "substantial_factor": "Substantial Factor (AI meaningfully influences outcome)",
     "autonomous": "Autonomous (AI decides without approval)",
@@ -147,9 +152,19 @@ CONTENT_OVERRIDES = {
 }
 
 HUMAN_REVIEW_OVERRIDES = {
-    "yes_all_outputs": "Yes — all outputs reviewed",
-    "yes_some_outputs": "Yes — some outputs reviewed",
-    "no": "No licensed review",
+    "yes": "Yes",
+    "no": "No",
+}
+
+ENTITY_OVERRIDES = {
+    "licensed": "Licensed",
+    "unlicensed": "Unlicensed",
+    "not_sure": "Not Sure",
+}
+
+SENSITIVE_OVERRIDES = {
+    "yes": "Yes",
+    "no": "No",
 }
 
 
@@ -203,25 +218,44 @@ def dedupe_preserve_order(items):
     return out
 
 
+def get_law_paths(jurisdiction):
+    laws_dir = f"{LAWS_ROOT}/{jurisdiction}"
+    enforcement_dir = f"{laws_dir}/enforcement"
+    return laws_dir, enforcement_dir
+
+
 # ---------- Default form data ----------
 def get_default_form_data():
-    _, _, entity_to_label = label_map(ENTITY)
-    _, _, review_to_label = label_map(HUMAN_LICENSED_REVIEW, HUMAN_REVIEW_OVERRIDES)
-    _, _, decision_to_label = label_map(DECISION_TYPE)
-    _, _, ieval_to_label = label_map(INDEPENDENT_EVAL)
     return {
         "jurisdiction": "TX",
-        "entity": "consumer_app" if "consumer_app" in ENTITY else ENTITY[0],
+        "entity": "licensed",
         "function_category": FUNCTION_CATEGORY[0],
         "content_type": CONTENT_TYPE[0],
         "clinical_domain": CLINICAL_DOMAIN[0],
-        "primary_user": ["patient"],
+        "primary_user": "patient",
         "human_licensed_review": "no",
         "communication_channel": None,
         "ai_role": "assistive",
-        "decision_type": "other",
+        "decision_type": "administrative",
         "independent_evaluation": "no",
+        "sensitive_information": "yes",
         "model_changes": MODEL_CHANGES[0],
+    }
+
+
+def get_default_case_fact_inputs():
+    return {
+        "patient_name": "",
+        "date_of_birth": "",
+        "medical_record_number": "",
+        "practice_name": "",
+        "provider_name": "",
+        "ai_system_name": "",
+        "ai_use_purpose": "",
+        "ai_case_use_description": "",
+        "human_review_description": "",
+        "data_used_text": "",
+        "template_text": "",
     }
 
 
@@ -236,17 +270,25 @@ if "view" not in st.session_state:
     st.session_state.view = "landing"
 if "form_data" not in st.session_state:
     st.session_state.form_data = get_default_form_data()
-if "communication_channel_override" not in st.session_state:
-    st.session_state.communication_channel_override = False
 if "result" not in st.session_state:
     st.session_state.result = None
+if "case_fact_inputs" not in st.session_state:
+    st.session_state.case_fact_inputs = get_default_case_fact_inputs()
+if "consent_brief" not in st.session_state:
+    st.session_state.consent_brief = None
+if "generated_document" not in st.session_state:
+    st.session_state.generated_document = None
+if "document_validation" not in st.session_state:
+    st.session_state.document_validation = None
+if "document_generation_error" not in st.session_state:
+    st.session_state.document_generation_error = None
 
 view = st.session_state.view
 form_data = st.session_state.form_data
 
 # ---------- Build UI label maps once ----------
 JUR_LABELS, JUR_TO_VAL, JUR_TO_LABEL = label_map(JURISDICTION)
-ENTITY_LABELS, ENTITY_TO_VAL, ENTITY_TO_LABEL = label_map(ENTITY)
+ENTITY_LABELS, ENTITY_TO_VAL, ENTITY_TO_LABEL = label_map(ENTITY, ENTITY_OVERRIDES)
 FUNC_LABELS, FUNC_TO_VAL, FUNC_TO_LABEL = label_map(FUNCTION_CATEGORY, FUNCTION_OVERRIDES)
 CONTENT_LABELS, CONTENT_TO_VAL, CONTENT_TO_LABEL = label_map(CONTENT_TYPE, CONTENT_OVERRIDES)
 DOMAIN_LABELS, DOMAIN_TO_VAL, DOMAIN_TO_LABEL = label_map(CLINICAL_DOMAIN)
@@ -256,6 +298,7 @@ CHANNEL_LABELS, CHANNEL_TO_VAL, CHANNEL_TO_LABEL = label_map(COMMUNICATION_CHANN
 AIROLE_LABELS, AIROLE_TO_VAL, AIROLE_TO_LABEL = label_map(AI_ROLE, AI_ROLE_OVERRIDES)
 DECISION_LABELS, DECISION_TO_VAL, DECISION_TO_LABEL = label_map(DECISION_TYPE)
 IEVAL_LABELS, IEVAL_TO_VAL, IEVAL_TO_LABEL = label_map(INDEPENDENT_EVAL)
+SENSITIVE_LABELS, SENSITIVE_TO_VAL, SENSITIVE_TO_LABEL = label_map(SENSITIVE_INFORMATION, SENSITIVE_OVERRIDES)
 MODEL_LABELS, MODEL_TO_VAL, MODEL_TO_LABEL = label_map(MODEL_CHANGES)
 
 
@@ -266,6 +309,218 @@ def get_current_step():
     if isinstance(view, int) and 1 <= view <= 11:
         return view
     return 1
+
+
+def clear_document_workflow_state():
+    st.session_state.case_fact_inputs = get_default_case_fact_inputs()
+    st.session_state.consent_brief = None
+    st.session_state.generated_document = None
+    st.session_state.document_validation = None
+    st.session_state.document_generation_error = None
+
+
+def parse_data_used_text(value):
+    pieces = []
+    for raw in (value or "").replace("\n", ",").split(","):
+        normalized = raw.strip()
+        if normalized and normalized not in pieces:
+            pieces.append(normalized)
+    return pieces
+
+
+def seed_case_fact_inputs_from_context(form_data, result_facts):
+    defaults = {
+        "ai_use_purpose": (
+            f"Use AI for {pretty_label(form_data.get('function_category', 'workflow')).lower()}."
+        ),
+        "human_review_description": (
+            "A licensed clinician reviews AI outputs before they are used in care."
+            if form_data.get("human_licensed_review") == "yes"
+            else "Describe any human review or operational oversight applied before the AI output is used."
+        ),
+        "data_used_text": pretty_label(form_data.get("content_type", "")),
+    }
+
+    for key, default_value in defaults.items():
+        if not st.session_state.case_fact_inputs.get(key):
+            st.session_state.case_fact_inputs[key] = default_value
+
+    if (
+        result_facts.get("uses_patient_medical_record")
+        and not st.session_state.case_fact_inputs.get("data_used_text")
+    ):
+        st.session_state.case_fact_inputs["data_used_text"] = "Patient clinical information"
+
+
+def build_case_facts_for_generation(form_data, case_fact_inputs):
+    return CaseFactsSchema(
+        jurisdiction=form_data.get("jurisdiction"),
+        entity=form_data.get("entity"),
+        primary_user=form_data.get("primary_user"),
+        patient_name=case_fact_inputs.get("patient_name") or None,
+        date_of_birth=case_fact_inputs.get("date_of_birth") or None,
+        medical_record_number=case_fact_inputs.get("medical_record_number") or None,
+        practice_name=case_fact_inputs.get("practice_name") or None,
+        provider_name=case_fact_inputs.get("provider_name") or None,
+        ai_system_name=case_fact_inputs.get("ai_system_name") or None,
+        ai_use_purpose=case_fact_inputs.get("ai_use_purpose") or None,
+        ai_case_use_description=case_fact_inputs.get("ai_case_use_description") or None,
+        human_review_description=case_fact_inputs.get("human_review_description") or None,
+        data_used=parse_data_used_text(case_fact_inputs.get("data_used_text")),
+        ai_role=form_data.get("ai_role"),
+        independent_evaluation=form_data.get("independent_evaluation"),
+        function_category=form_data.get("function_category"),
+        content_type=form_data.get("content_type"),
+        human_licensed_review=form_data.get("human_licensed_review"),
+        communication_channel=form_data.get("communication_channel"),
+        clinical_domain=form_data.get("clinical_domain"),
+        decision_type=form_data.get("decision_type"),
+        sensitive_information=form_data.get("sensitive_information"),
+        model_changes=form_data.get("model_changes"),
+    )
+
+
+def build_evaluation_result_for_generation(result, fallback_jurisdiction):
+    facts = result.get("facts", {})
+    matched_law_ids = []
+    obligations = []
+    prohibitions = []
+    exceptions = []
+
+    derived_fact_values = {}
+    for field_name in DerivedFactsSchema.__dataclass_fields__:
+        if field_name in facts:
+            derived_fact_values[field_name] = facts[field_name]
+    derived_facts = DerivedFactsSchema(**derived_fact_values) if derived_fact_values else None
+
+    for law in result.get("matched_laws", []):
+        law_id = law.get("law_id")
+        if law_id and law_id not in matched_law_ids:
+            matched_law_ids.append(law_id)
+
+        default_citation = law.get("citation")
+
+        for item in law.get("applicable_obligations", []):
+            evaluation_item = build_evaluation_item(
+                law_id=law_id,
+                item=item,
+                item_kind=(
+                    EvaluationItemKindEnum.EXCEPTION
+                    if item.get("type") == "exception"
+                    else EvaluationItemKindEnum.OBLIGATION
+                ),
+                default_citation=default_citation,
+            )
+            if evaluation_item.item_kind == EvaluationItemKindEnum.EXCEPTION:
+                exceptions.append(evaluation_item)
+            else:
+                obligations.append(evaluation_item)
+
+        for item in law.get("applicable_prohibitions", []):
+            prohibitions.append(
+                build_evaluation_item(
+                    law_id=law_id,
+                    item=item,
+                    item_kind=EvaluationItemKindEnum.PROHIBITION,
+                    default_citation=default_citation,
+                )
+            )
+
+    return EvaluationResultSchema(
+        jurisdiction=facts.get("jurisdiction") or fallback_jurisdiction,
+        matched_law_ids=matched_law_ids,
+        obligations=obligations,
+        prohibitions=prohibitions,
+        exceptions=exceptions,
+        derived_facts=derived_facts,
+    )
+
+
+def build_evaluation_item(law_id, item, item_kind, default_citation=None):
+    requirements = item.get("requirements") or []
+    format_constraints = [
+        requirement
+        for requirement in requirements
+        if requirement in FORMAT_CONSTRAINT_VALUES
+    ]
+
+    item_id = (
+        item.get("obligation_id")
+        or item.get("prohibition_id")
+        or item.get("item_id")
+        or "item"
+    )
+    content = (
+        item.get("content")
+        or item.get("text")
+        or item_id
+    )
+    requirement_type = item.get("type")
+    if item_kind == EvaluationItemKindEnum.PROHIBITION:
+        requirement_type = None
+
+    return EvaluationItemSchema(
+        law_id=law_id or "unknown_law",
+        item_id=item_id,
+        item_kind=item_kind,
+        required=item.get("required", True),
+        content=content,
+        requirement_type=requirement_type,
+        citation=item.get("citation") or default_citation,
+        timing_rule=item.get("timing"),
+        format_constraints=format_constraints,
+        requirements=requirements,
+        source_trigger_ids=item.get("applies_when", []),
+    )
+
+
+def build_document_preview_text(document):
+    lines = [document.title, "=" * len(document.title), ""]
+
+    for section in sorted(document.sections, key=lambda item: item.order):
+        heading = section.heading or pretty_label(section.section_id.value)
+        lines.append(heading)
+        lines.append("-" * len(heading))
+        if section.body:
+            lines.append(section.body)
+        for bullet in section.bullets:
+            lines.append(f"- {bullet}")
+        lines.append("")
+
+    if document.signature_block is not None:
+        lines.append("Signature Block")
+        lines.append("---------------")
+        lines.append(document.signature_block.signer_label)
+        if document.signature_block.acknowledgment_text:
+            lines.append(document.signature_block.acknowledgment_text)
+        if document.signature_block.date_required:
+            lines.append("Date: __________________")
+        if document.signature_block.signature_required:
+            lines.append("Signature: __________________")
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
+def render_generated_document_preview(document):
+    st.markdown(f"### {document.title}")
+    for section in sorted(document.sections, key=lambda item: item.order):
+        heading = section.heading or pretty_label(section.section_id.value)
+        st.markdown(f"#### {heading}")
+        if section.body:
+            st.markdown(section.body)
+        for bullet in section.bullets:
+            st.markdown(f"- {bullet}")
+
+    if document.signature_block is not None:
+        st.markdown("#### Signature Block")
+        st.markdown(document.signature_block.signer_label)
+        if document.signature_block.acknowledgment_text:
+            st.markdown(document.signature_block.acknowledgment_text)
+        if document.signature_block.date_required:
+            st.markdown("Date: __________________")
+        if document.signature_block.signature_required:
+            st.markdown("Signature: __________________")
 
 
 # ---------- Styling (warm cream, yellow accent, blue CTA) ----------
@@ -493,15 +748,15 @@ if view == 1:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 1/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Where is the system deployed?")
-            st.caption("This determines which laws apply. This demo currently evaluates Texas only.")
+            st.caption("This determines which laws apply. Texas rules are populated today; other jurisdictions currently return no matches.")
             st.markdown("<br>", unsafe_allow_html=True)
             idx = JUR_LABELS.index(JUR_TO_LABEL.get(form_data.get("jurisdiction", "TX"), JUR_LABELS[0]))
             sel_jur = st.selectbox("Jurisdiction", JUR_LABELS, index=idx, key="step1_jurisdiction", label_visibility="collapsed")
             st.markdown("---")
             st.markdown("### What kind of organization is deploying or operating the system?")
-            st.caption("e.g. health facility, clinic, consumer app, telehealth provider.")
+            st.caption("Select whether the deploying organization is licensed, unlicensed, or not sure.")
             st.markdown("<br>", unsafe_allow_html=True)
-            ent_val = form_data.get("entity", "consumer_app")
+            ent_val = form_data.get("entity", ENTITY[0])
             ent_label = ENTITY_TO_LABEL.get(ent_val, ENTITY_LABELS[0])
             idx_e = ENTITY_LABELS.index(ent_label) if ent_label in ENTITY_LABELS else 0
             sel_ent = st.selectbox("Entity", ENTITY_LABELS, index=idx_e, key="step1_entity", label_visibility="collapsed")
@@ -587,6 +842,14 @@ if view == 3:
             label = CONTENT_TO_LABEL.get(val, CONTENT_LABELS[0])
             idx = CONTENT_LABELS.index(label) if label in CONTENT_LABELS else 0
             sel = st.selectbox("Content", CONTENT_LABELS, index=idx, key="step3_content", label_visibility="collapsed")
+            st.markdown("---")
+            st.markdown("### Does the input include sensitive information?")
+            st.caption("Includes financial, medical, or patient privacy information.")
+            st.markdown("<br>", unsafe_allow_html=True)
+            sensitive_val = form_data.get("sensitive_information", SENSITIVE_INFORMATION[0])
+            sensitive_label = SENSITIVE_TO_LABEL.get(sensitive_val, SENSITIVE_LABELS[0])
+            sensitive_idx = SENSITIVE_LABELS.index(sensitive_label) if sensitive_label in SENSITIVE_LABELS else 0
+            sensitive_sel = st.selectbox("Sensitive information", SENSITIVE_LABELS, index=sensitive_idx, key="step3_sensitive", label_visibility="collapsed")
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -594,7 +857,7 @@ if view == 3:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next3"):
-                    save_and_next(3, content_type=CONTENT_TO_VAL[sel])
+                    save_and_next(3, content_type=CONTENT_TO_VAL[sel], sensitive_information=SENSITIVE_TO_VAL[sensitive_sel])
     st.stop()
 
 # ---------- Step 4: Clinical domain ----------
@@ -622,7 +885,7 @@ if view == 4:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 4/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Which clinical area is this related to?")
-            st.caption("e.g. mental health, emergency care, pediatric care, reproductive health.")
+            st.caption("e.g. general health, mental health, emergency care, wellness/care coordination, or specialty care.")
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("clinical_domain", CLINICAL_DOMAIN[0])
             label = DOMAIN_TO_LABEL.get(val, DOMAIN_LABELS[0])
@@ -663,11 +926,14 @@ if view == 5:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 5/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Who directly receives or views the system output?")
-            st.caption("Select all that apply: patient, health care professional, care team, administrator, etc.")
+            st.caption("Select the primary audience for the system output.")
             st.markdown("<br>", unsafe_allow_html=True)
-            default_labels = [USER_TO_LABEL.get(u, pretty_label(u)) for u in form_data.get("primary_user", ["patient"])]
-            default_labels = [x for x in default_labels if x in USER_LABELS] or [USER_TO_LABEL.get("patient", "Patient")]
-            sel = st.multiselect("Users", USER_LABELS, default=default_labels, key="step5_user", label_visibility="collapsed")
+            default_value = form_data.get("primary_user", "patient")
+            if isinstance(default_value, list):
+                default_value = default_value[0] if default_value else "patient"
+            default_label = USER_TO_LABEL.get(default_value, USER_LABELS[0])
+            idx = USER_LABELS.index(default_label) if default_label in USER_LABELS else 0
+            sel = st.selectbox("Users", USER_LABELS, index=idx, key="step5_user", label_visibility="collapsed")
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -675,7 +941,7 @@ if view == 5:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next5"):
-                    save_and_next(5, primary_user=[USER_TO_VAL[x] for x in sel])
+                    save_and_next(5, primary_user=USER_TO_VAL[sel])
     st.stop()
 
 # ---------- Step 6: Human licensed review ----------
@@ -703,7 +969,7 @@ if view == 6:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 6/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Does a licensed clinician review AI outputs before they affect care?")
-            st.caption("Whether a licensed clinician reviews AI outputs before they affect care (all, some, or none).")
+            st.caption("Whether a licensed clinician reviews AI outputs before they affect care.")
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("human_licensed_review", "no")
             label = REVIEW_TO_LABEL.get(val, REVIEW_LABELS[0])
@@ -744,15 +1010,14 @@ if view == 7:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 7/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### How does the patient interact with the system output?")
-            primary_user = form_data.get("primary_user", [])
-            show_channel = "patient" in primary_user or st.session_state.communication_channel_override
+            primary_user = form_data.get("primary_user")
+            if isinstance(primary_user, list):
+                primary_user = primary_user[0] if primary_user else None
+            show_channel = primary_user == "patient"
 
             if not show_channel:
-                st.caption("Not applicable — patient is not selected as a primary user. You can enable this step below if that was a mistake.")
+                st.caption("Not applicable because the primary user is not the patient.")
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("Enable anyway", key="enable_channel"):
-                    st.session_state.communication_channel_override = True
-                    st.rerun()
                 b1, b2 = st.columns(2)
                 with b1:
                     if st.button("← Back", key="back7"):
@@ -771,10 +1036,6 @@ if view == 7:
             else:
                 idx = 0
             sel = st.selectbox("Channel", CHANNEL_LABELS, index=idx, key="step7_channel", label_visibility="collapsed")
-            if st.session_state.communication_channel_override:
-                if st.button("Disable again (patient not primary user)", key="disable_channel"):
-                    st.session_state.communication_channel_override = False
-                    st.rerun()
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -851,9 +1112,9 @@ if view == 9:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 9/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### What type of decision does the system support?")
-            st.caption("e.g. diagnosis, treatment, triage, eligibility, monitoring, or documentation.")
+            st.caption("e.g. diagnosis, treatment, triage, monitoring alert, documentation, or administrative.")
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("decision_type", "other")
+            val = form_data.get("decision_type", "administrative")
             label = DECISION_TO_LABEL.get(val, DECISION_LABELS[0])
             idx = DECISION_LABELS.index(label) if label in DECISION_LABELS else 0
             sel = st.selectbox("Decision", DECISION_LABELS, index=idx, key="step9_decision", label_visibility="collapsed")
@@ -981,13 +1242,17 @@ if view == "review":
             domain_label = DOMAIN_TO_LABEL.get(form_data.get("clinical_domain"), "")
             decision_label = DECISION_TO_LABEL.get(form_data.get("decision_type"), "")
             airole_label = AIROLE_TO_LABEL.get(form_data.get("ai_role"), "")
-            primary_user = form_data.get("primary_user", [])
+            primary_user = form_data.get("primary_user")
+            if isinstance(primary_user, list):
+                primary_user = primary_user[0] if primary_user else None
             content_type = form_data.get("content_type", "")
+            sensitive_information = form_data.get("sensitive_information", "no")
             summary = (
                 f"{entity_label} | {func_label} | {domain_label} | "
                 f"{decision_label} | {airole_label} | "
-                f"Patient-facing: {'Yes' if 'patient' in primary_user else 'No'} | "
-                f"EHR: {'Yes' if content_type == 'patient_clinical_information' else 'No'}"
+                f"Patient-facing: {'Yes' if primary_user == 'patient' else 'No'} | "
+                f"Clinical data: {'Yes' if content_type == 'patient_clinical_information' else 'No'} | "
+                f"Sensitive info: {pretty_label(sensitive_information)}"
             )
             st.text_area("Summary", value=summary, height=80, disabled=True, key="review_summary", label_visibility="collapsed")
             st.markdown("<br>", unsafe_allow_html=True)
@@ -997,6 +1262,7 @@ if view == "review":
                     go_back()
             with b2:
                 if st.button("Submit →", type="primary", key="submit"):
+                    clear_document_workflow_state()
                     user_input = {
                         "jurisdiction": form_data.get("jurisdiction"),
                         "entity": form_data.get("entity"),
@@ -1009,12 +1275,14 @@ if view == "review":
                         "ai_role": form_data.get("ai_role"),
                         "decision_type": form_data.get("decision_type"),
                         "independent_evaluation": form_data.get("independent_evaluation"),
+                        "sensitive_information": form_data.get("sensitive_information"),
                         "model_changes": form_data.get("model_changes"),
                     }
+                    laws_dir, enforcement_dir = get_law_paths(user_input["jurisdiction"])
                     st.session_state.result = evaluate(
                         user_input=user_input,
-                        laws_dir=LAWS_DIR,
-                        enforcement_dir=ENFORCEMENT_DIR,
+                        laws_dir=laws_dir,
+                        enforcement_dir=enforcement_dir,
                     )
                     st.session_state.view = "results"
                     st.rerun()
@@ -1029,9 +1297,15 @@ if view == "results":
         st.stop()
 
     matched = result.get("matched_laws", [])
+    result_facts = result.get("facts", {})
 
     if not matched:
         st.warning("No applicable laws triggered for these inputs.")
+        st.markdown("---")
+        st.markdown("### Generate Patient Disclosure / Consent Document")
+        st.info(
+            "Document generation is unavailable because this scenario did not trigger any disclosure or consent obligations."
+        )
     else:
         with st.expander("Relevant laws (sections that apply)", expanded=True):
             for law in matched:
@@ -1064,11 +1338,244 @@ if view == "results":
                 st.write("No prohibitions for this scenario.")
 
         with st.expander("Debug: derived facts", expanded=False):
-            st.json(result.get("facts", {}))
+            st.json(result_facts)
+
+        seed_case_fact_inputs_from_context(form_data, result_facts)
+
+        st.markdown("---")
+        st.markdown("### Generate Patient Disclosure / Consent Document")
+        st.caption(
+            "Add case-specific facts, generate a structured draft, and validate it before download."
+        )
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            st.error(
+                "OpenAI document generation is unavailable because `OPENAI_API_KEY` was not found in the environment or `.env` file."
+            )
+        else:
+            st.caption("OpenAI key detected. Document generation is enabled.")
+
+        case_fact_inputs = st.session_state.case_fact_inputs
+
+        with st.form("document_generation_form"):
+            left_col, right_col = st.columns(2)
+            with left_col:
+                patient_name = st.text_input(
+                    "Patient name",
+                    value=case_fact_inputs.get("patient_name", ""),
+                )
+                date_of_birth = st.text_input(
+                    "DOB",
+                    value=case_fact_inputs.get("date_of_birth", ""),
+                    help="Use the format your organization prefers.",
+                )
+                medical_record_number = st.text_input(
+                    "Medical record number (if applicable)",
+                    value=case_fact_inputs.get("medical_record_number", ""),
+                )
+                practice_name = st.text_input(
+                    "Practice name",
+                    value=case_fact_inputs.get("practice_name", ""),
+                )
+                provider_name = st.text_input(
+                    "Provider name",
+                    value=case_fact_inputs.get("provider_name", ""),
+                )
+                ai_system_name = st.text_input(
+                    "AI system name",
+                    value=case_fact_inputs.get("ai_system_name", ""),
+                )
+            with right_col:
+                ai_use_purpose = st.text_area(
+                    "AI use purpose",
+                    value=case_fact_inputs.get("ai_use_purpose", ""),
+                    height=100,
+                )
+                ai_case_use_description = st.text_area(
+                    "AI case use description",
+                    value=case_fact_inputs.get("ai_case_use_description", ""),
+                    height=120,
+                )
+                human_review_description = st.text_area(
+                    "Human review description",
+                    value=case_fact_inputs.get("human_review_description", ""),
+                    height=100,
+                )
+                data_used_text = st.text_area(
+                    "Data used",
+                    value=case_fact_inputs.get("data_used_text", ""),
+                    height=100,
+                    help="Enter comma-separated or line-separated data inputs.",
+                )
+                template_text = st.text_area(
+                    "Base consent/disclosure text (optional)",
+                    value=case_fact_inputs.get("template_text", ""),
+                    height=100,
+                )
+
+            generate_clicked = st.form_submit_button(
+                "Generate document",
+                type="primary",
+                disabled=not openai_api_key,
+            )
+
+        if generate_clicked:
+            st.session_state.case_fact_inputs = {
+                "patient_name": patient_name,
+                "date_of_birth": date_of_birth,
+                "medical_record_number": medical_record_number,
+                "practice_name": practice_name,
+                "provider_name": provider_name,
+                "ai_system_name": ai_system_name,
+                "ai_use_purpose": ai_use_purpose,
+                "ai_case_use_description": ai_case_use_description,
+                "human_review_description": human_review_description,
+                "data_used_text": data_used_text,
+                "template_text": template_text,
+            }
+
+            required_fields = [
+                ("practice_name", "Practice name"),
+                ("provider_name", "Provider name"),
+                ("ai_system_name", "AI system name"),
+                ("ai_use_purpose", "AI use purpose"),
+                ("ai_case_use_description", "AI case use description"),
+                ("human_review_description", "Human review description"),
+                ("data_used_text", "Data used"),
+            ]
+            if (
+                form_data.get("primary_user") == "patient"
+                or form_data.get("content_type") == "patient_clinical_information"
+            ):
+                required_fields = [
+                    ("patient_name", "Patient name"),
+                    ("date_of_birth", "DOB"),
+                    *required_fields,
+                ]
+
+            missing_case_fields = [
+                label
+                for key, label in required_fields
+                if not st.session_state.case_fact_inputs.get(key, "").strip()
+            ]
+
+            st.session_state.generated_document = None
+            st.session_state.document_validation = None
+            st.session_state.document_generation_error = None
+            st.session_state.consent_brief = None
+
+            if missing_case_fields:
+                st.session_state.document_generation_error = (
+                    "Please complete the required case facts before generating the document."
+                )
+            else:
+                try:
+                    evaluation_result = build_evaluation_result_for_generation(
+                        result,
+                        fallback_jurisdiction=form_data.get("jurisdiction"),
+                    )
+                    case_facts = build_case_facts_for_generation(
+                        form_data,
+                        st.session_state.case_fact_inputs,
+                    )
+                    brief = build_consent_document_brief(evaluation_result, case_facts)
+                    st.session_state.consent_brief = brief
+
+                    if brief.generation_blockers:
+                        st.session_state.document_generation_error = (
+                            "Document generation is blocked until the issues below are resolved."
+                        )
+                    else:
+                        generated_document = generate_document_from_brief(
+                            brief=brief,
+                            case_facts=case_facts,
+                            template_text=(
+                                st.session_state.case_fact_inputs.get("template_text") or None
+                            ),
+                        )
+                        validation_result = validate_generated_document(
+                            brief,
+                            generated_document,
+                        )
+                        st.session_state.generated_document = generated_document
+                        st.session_state.document_validation = validation_result
+                except DocumentGenerationError as exc:
+                    st.session_state.document_generation_error = str(exc)
+                except Exception as exc:
+                    st.session_state.document_generation_error = (
+                        f"Unable to generate the document: {exc}"
+                    )
+
+        if st.session_state.document_generation_error:
+            st.error(st.session_state.document_generation_error)
+
+        if generate_clicked and "missing_case_fields" in locals() and missing_case_fields:
+            st.markdown("**Missing case facts**")
+            for label in missing_case_fields:
+                st.markdown(f"- {label}")
+
+        brief = st.session_state.consent_brief
+        validation_result = st.session_state.document_validation
+        generated_document = st.session_state.generated_document
+
+        if brief and brief.generation_blockers:
+            st.markdown("**Generation blockers**")
+            for blocker in brief.generation_blockers:
+                st.markdown(f"- {blocker}")
+
+        if validation_result is not None and not validation_result.is_valid:
+            st.error("The generated document did not pass validation.")
+
+            if validation_result.failed_constraints:
+                st.markdown("**Failed constraints**")
+                for item in validation_result.failed_constraints:
+                    st.markdown(f"- {item}")
+
+            if validation_result.missing_sections:
+                st.markdown("**Missing sections**")
+                for section_id in validation_result.missing_sections:
+                    st.markdown(f"- {pretty_label(section_id.value)}")
+
+            if validation_result.missing_points:
+                st.markdown("**Missing points**")
+                for point in validation_result.missing_points:
+                    st.markdown(f"- {point}")
+
+            if validation_result.warnings:
+                st.markdown("**Warnings**")
+                for warning in validation_result.warnings:
+                    st.markdown(f"- {warning}")
+
+        if generated_document is not None:
+            if validation_result is not None and validation_result.is_valid:
+                st.success("The generated document passed validation.")
+                if validation_result.warnings:
+                    for warning in validation_result.warnings:
+                        st.warning(warning)
+            elif validation_result is not None:
+                st.warning(
+                    "Showing the generated draft below even though it did not pass validation."
+                )
+
+            st.markdown("### Draft preview")
+            render_generated_document_preview(generated_document)
+            st.download_button(
+                (
+                    "Download as .txt"
+                    if validation_result is not None and validation_result.is_valid
+                    else "Download draft as .txt"
+                ),
+                data=build_document_preview_text(generated_document),
+                file_name=(
+                    generated_document.title.lower().replace(" ", "_").replace("/", "_")
+                    + ".txt"
+                ),
+                mime="text/plain",
+            )
 
     if st.button("Start over", type="primary", key="start_over"):
         st.session_state.view = "landing"
         st.session_state.result = None
         st.session_state.form_data = get_default_form_data()
-        st.session_state.communication_channel_override = False
+        clear_document_workflow_state()
         st.rerun()

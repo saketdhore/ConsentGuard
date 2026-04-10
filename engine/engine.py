@@ -5,6 +5,14 @@ from engine.matcher import eval_law
 from engine.loader import load_laws
 
 
+ACTIVE_RULE_TYPES = {
+    "commercial_biometric_privacy",
+    "general_ai_deployment",
+    "consumer_and_healthcare_service_disclosure",
+    "licensed_practitioner_diagnostic_use",
+}
+
+
 def build_enforcement_index(enforcement_laws):
     idx = {}
     for e in enforcement_laws:
@@ -17,7 +25,10 @@ def build_enforcement_index(enforcement_laws):
 def evaluate(user_input, laws_dir, enforcement_dir=None):
     facts = derive_facts(user_input)
 
-    laws = load_laws(laws_dir)
+    laws = [
+        law for law in load_laws(laws_dir)
+        if law.get("law_type") in ACTIVE_RULE_TYPES
+    ]
     enforcement_idx = {}
 
     if enforcement_dir:
@@ -26,6 +37,9 @@ def evaluate(user_input, laws_dir, enforcement_dir=None):
 
     matched = []
     for law in laws:
+        if law.get("jurisdiction") == "TX" and not facts.get("is_texas_jurisdiction"):
+            continue
+
         out = eval_law(law, facts)
 
         has_obligations = len(out.get("applicable_obligations", [])) > 0

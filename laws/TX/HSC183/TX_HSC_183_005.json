@@ -5,16 +5,18 @@
   "act": "SB 1188",
   "effective_date": "2025-09-01",
   "status": "active",
-  "law_type": "ai_diagnostic_use",
+  "law_type": "licensed_practitioner_diagnostic_use",
 
   "triggers": {
-    "ai_used_for_diagnostic_purposes": {
-      "description": "AI used for diagnosis or treatment recommendation based on patient's medical record",
+    "tx_183_005_practitioner_diagnostic_use": {
+      "description": "Licensed practitioner uses AI for diagnostic purposes or treatment recommendations based on a patient's medical record",
       "all_of": [
-        { "field": "jurisdiction", "op": "==", "value": "TX" },
-        { "field": "is_covered_entity_under_183", "op": "==", "value": true },
-        { "field": "decision_type", "op": "in", "value": ["diagnosis", "treatment"] },
-        { "field": "ai_role", "op": "!=", "value": "none" }
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "is_health_care_practitioner", "op": "==", "value": true },
+        { "field": "is_licensed_practitioner", "op": "==", "value": true },
+        { "field": "uses_patient_medical_record", "op": "==", "value": true },
+        { "field": "is_diagnostic_or_treatment_use", "op": "==", "value": true },
+        { "field": "is_ai_diagnostic_support", "op": "==", "value": true }
       ]
     }
   },
@@ -22,7 +24,7 @@
   "obligations": [
     {
       "obligation_id": "AI_SCOPE_OF_LICENSE_REQUIREMENT",
-      "applies_when": ["ai_used_for_diagnostic_purposes"],
+      "applies_when": ["tx_183_005_practitioner_diagnostic_use"],
       "type": "scope_requirement",
       "required": true,
       "content": "Artificial intelligence may be used only if the practitioner is acting within the scope of the practitioner's license, certification, or authorization.",
@@ -30,7 +32,7 @@
     },
     {
       "obligation_id": "AI_NOT_OTHERWISE_PROHIBITED",
-      "applies_when": ["ai_used_for_diagnostic_purposes"],
+      "applies_when": ["tx_183_005_practitioner_diagnostic_use"],
       "type": "legal_compliance_requirement",
       "required": true,
       "content": "The particular use of artificial intelligence must not be otherwise restricted or prohibited by state or federal law.",
@@ -38,19 +40,19 @@
     },
     {
       "obligation_id": "AI_RECORD_REVIEW_REQUIRED",
-      "applies_when": ["ai_used_for_diagnostic_purposes"],
+      "applies_when": ["tx_183_005_practitioner_diagnostic_use"],
       "type": "human_review_requirement",
       "required": true,
-      "content": "The practitioner must review all records created with artificial intelligence consistent with Texas Medical Board medical record standards.",
+      "content": "The practitioner must review all records created with artificial intelligence consistent with Texas Medical Board standards.",
       "citation": "§183.005(a)(3)"
     },
     {
       "obligation_id": "AI_DISCLOSURE_TO_PATIENT",
-      "applies_when": ["ai_used_for_diagnostic_purposes"],
+      "applies_when": ["tx_183_005_practitioner_diagnostic_use"],
       "type": "disclosure",
       "required": true,
       "timing": "at_or_before_use",
-      "content": "The practitioner must disclose to the patient that artificial intelligence was used for diagnostic purposes.",
+      "content": "The practitioner must disclose use of the artificial intelligence technology to the practitioner's patients.",
       "citation": "§183.005(b)"
     }
   ],
@@ -58,6 +60,6 @@
   "enforcement_ref": ["TX_HSC_183_ENFORCEMENT"],
 
   "notes": [
-    "Applies only when AI is used for diagnosis or treatment recommendations based on a patient's medical record."
+    "This rule is practitioner-specific and is not the same as the broader Texas healthcare-service disclosure rule."
   ]
 }

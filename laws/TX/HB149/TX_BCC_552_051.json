@@ -5,73 +5,109 @@
   "act": "HB 149",
   "effective_date": "2026-01-01",
   "status": "active",
-  "law_type": "ai_disclosure",
+  "law_type": "consumer_and_healthcare_service_disclosure",
 
   "triggers": {
-    "consumer_interaction": {
-      "description": "AI system intended to interact with consumers",
+    "tx_552_disclosure_required": {
+      "description": "Texas Chapter 552 disclosure applies because the system is used for covered consumer interaction or healthcare service/treatment and no PHI/IIHI exception blocks disclosure",
       "all_of": [
-        { "field": "primary_user", "op": "contains", "value": "patient" }
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "chapter_552_disclosure_required", "op": "==", "value": true }
       ]
     },
-
-    "healthcare_service_or_treatment": {
-      "description": "AI system used in relation to healthcare service or treatment",
-      "any_of": [
-        {
-          "field": "function_category",
-          "op": "in",
-          "value": [
-            "clinical_decision_support",
-            "medical_imaging_analysis",
-            "triage_risk_scoring",
-            "treatment_support",
-            "clinical_documentation",
-            "remote_patient_monitoring"
-          ]
-        },
-        {
-          "field": "decision_type",
-          "op": "in",
-          "value": [
-            "diagnosis",
-            "treatment",
-            "triage",
-            "monitoring_alert"
-          ]
-        }
+    "tx_552_privacy_exception": {
+      "description": "PHI / IIHI confidentiality exception limits Chapter 552 disclosure",
+      "all_of": [
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "chapter_552_disclosure_exception", "op": "==", "value": true }
+      ]
+    },
+    "tx_552_healthcare_recipient": {
+      "description": "Healthcare-service disclosure must be given to the service recipient or the recipient's personal representative",
+      "all_of": [
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "is_healthcare_use", "op": "==", "value": true }
+      ]
+    },
+    "tx_552_emergency_timing": {
+      "description": "Emergency-care disclosure timing applies",
+      "all_of": [
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "disclosure_timing_emergency", "op": "==", "value": true }
+      ]
+    },
+    "tx_552_standard_timing": {
+      "description": "Standard healthcare disclosure timing applies",
+      "all_of": [
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "disclosure_timing_standard", "op": "==", "value": true }
       ]
     }
   },
 
   "obligations": [
     {
-      "obligation_id": "DISCLOSE_AI_INTERACTION",
-      "applies_when": ["consumer_interaction"],
+      "obligation_id": "DISCLOSE_AI_USE",
+      "applies_when": ["tx_552_disclosure_required"],
       "type": "disclosure",
       "required": true,
-      "timing": "before_or_at_time_of_interaction",
-      "content": "Disclose that the consumer is interacting with an artificial intelligence system."
+      "content": "Disclose the use of the artificial intelligence system even when that use would otherwise be obvious."
     },
     {
       "obligation_id": "DISCLOSURE_QUALITY",
-      "applies_when": ["consumer_interaction"],
+      "applies_when": ["tx_552_disclosure_required"],
       "type": "format_requirement",
       "required": true,
       "requirements": [
         "clear_and_conspicuous",
         "plain_language",
         "no_dark_patterns"
-      ]
+      ],
+      "content": "Make the disclosure clear and conspicuous, in plain language, and without dark patterns."
     },
     {
-      "obligation_id": "HEALTHCARE_TIMING_RULE",
-      "applies_when": ["healthcare_service_or_treatment"],
+      "obligation_id": "DISCLOSURE_HYPERLINK_OPTION",
+      "applies_when": ["tx_552_disclosure_required"],
+      "type": "format_option",
+      "required": true,
+      "content": "The required disclosure may be provided through a hyperlink to a separate webpage containing the disclosure."
+    },
+    {
+      "obligation_id": "EMERGENCY_DISCLOSURE_TIMING",
+      "applies_when": ["tx_552_disclosure_required", "tx_552_emergency_timing"],
       "type": "timing_requirement",
       "required": true,
-      "timing": "no_later_than_first_date_of_service"
+      "timing": "as_soon_as_reasonably_possible",
+      "content": "For emergency care, provide the disclosure as soon as reasonably possible."
+    },
+    {
+      "obligation_id": "STANDARD_DISCLOSURE_TIMING",
+      "applies_when": ["tx_552_disclosure_required", "tx_552_standard_timing"],
+      "type": "timing_requirement",
+      "required": true,
+      "timing": "no_later_than_first_date_of_service",
+      "content": "Outside emergency care, provide the disclosure no later than the date the service or treatment is first provided."
+    },
+    {
+      "obligation_id": "HEALTHCARE_DISCLOSURE_RECIPIENT",
+      "applies_when": ["tx_552_disclosure_required", "tx_552_healthcare_recipient"],
+      "type": "recipient_requirement",
+      "required": true,
+      "content": "For healthcare service or treatment, provide the disclosure to the recipient of the service or treatment or the recipient's personal representative."
+    },
+    {
+      "obligation_id": "PHI_IIHI_EXCEPTION",
+      "applies_when": ["tx_552_privacy_exception"],
+      "type": "exception",
+      "required": true,
+      "content": "Treat protected health information or individually identifiable health information as a confidentiality-based exception or limitation to Chapter 552 disclosure."
     }
   ],
 
-  "enforcement_ref": ["TX_BCC_552_ENFORCEMENT"]
+  "enforcement_ref": ["TX_BCC_552_ENFORCEMENT"],
+
+  "notes": [
+    "This rule is independently evaluated from the biometric privacy, general AI deployment, and practitioner diagnostic-use rules.",
+    "The PHI / IIHI issue is surfaced as an exception or limitation rather than ignored."
+  ]
 }

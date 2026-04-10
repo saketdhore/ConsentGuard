@@ -1,0 +1,48 @@
+{
+  "law_id": "TX_BCC_551_002_003",
+  "jurisdiction": "TX",
+  "citation": "Texas Business & Commerce Code §§551.002-551.003",
+  "act": "HB 149",
+  "status": "active",
+  "law_type": "general_ai_deployment",
+
+  "triggers": {
+    "tx_general_ai_deployment": {
+      "description": "A person develops or deploys an AI system in Texas",
+      "all_of": [
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "develops_or_deploys_ai_in_texas", "op": "==", "value": true }
+      ]
+    },
+    "tx_state_agency_ai_notice": {
+      "description": "State-agency notice context for AI use or contemplated use",
+      "all_of": [
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "develops_or_deploys_ai_in_texas", "op": "==", "value": true },
+        { "field": "requires_state_agency_ai_notice", "op": "==", "value": true }
+      ]
+    }
+  },
+
+  "obligations": [
+    {
+      "obligation_id": "GENERAL_AI_TRANSPARENCY",
+      "applies_when": ["tx_general_ai_deployment"],
+      "type": "transparency_requirement",
+      "required": true,
+      "content": "Provide transparency regarding risks in the development, deployment, and use of the AI system."
+    },
+    {
+      "obligation_id": "STATE_AGENCY_AI_NOTICE",
+      "applies_when": ["tx_state_agency_ai_notice"],
+      "type": "notice_requirement",
+      "required": true,
+      "content": "Provide reasonable notice regarding the use or contemplated use of AI systems by state agencies."
+    }
+  ],
+
+  "notes": [
+    "This rule is broad and does not depend on healthcare-specific facts.",
+    "The state-agency notice obligation is surfaced separately when the facts indicate a state-agency context."
+  ]
+}

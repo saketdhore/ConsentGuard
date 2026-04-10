@@ -3,142 +3,135 @@
 from engine.engine import evaluate
 from engine.render import summarize
 
-LAWS_DIR = "laws/TX"  # contains both HB149 and SB1188 sections
+LAWS_DIR = "laws/TX"
 ENFORCEMENT_DIR = "laws/TX/enforcement"
 
 
 # --------------------------------------------------
-# CASE 1: HB149 ONLY (AI disclosure law)
+# CASE 1: Texas consumer healthcare chatbot
 # --------------------------------------------------
 # Real world:
-# A mental health chatbot app giving wellness advice.
-# Not storing EHRs. Just communicating with patients.
-# => Disclosure rule applies. No EHR law.
+# Expected:
+# - General AI deployment (Chapter 551)
+# - Chapter 552 disclosure
 
-case_hb149_only = {
+case_tx_chatbot_disclosure = {
     "jurisdiction": "TX",
-    "entity": "consumer_app",
+    "entity": "unlicensed",
     "function_category": "patient_communication_genAI",
-    "content_type": "non_clinical_health_information",  # NOT EHR
+    "content_type": "non_clinical_health_information",
     "clinical_domain": "mental_health",
-    "primary_user": ["patient"],
+    "primary_user": "patient",
     "human_licensed_review": "no",
     "communication_channel": "chatbot",
     "ai_role": "assistive",
-    "decision_type": "other",
+    "decision_type": "administrative",
     "independent_evaluation": "no",
+    "sensitive_information": "no",
     "model_changes": "static",
 }
 
 
 # --------------------------------------------------
-# CASE 2: SB1188 ONLY (§183.002 EHR rules)
+# CASE 2: Texas emergency-care deployment
 # --------------------------------------------------
 # Real world:
-# A clinic using an EHR system to store patient medical records.
-# No AI diagnosis, no patient-facing AI.
-# => EHR storage/security rules apply.
-# => No AI disclosure/prohibition rules.
+# Expected:
+# - General AI deployment (Chapter 551)
+# - Chapter 552 disclosure with emergency timing
 
-case_183_only = {
+case_tx_emergency_disclosure = {
     "jurisdiction": "TX",
-    "entity": "clinic",
-    "function_category": "clinical_documentation",
-    "content_type": "patient_clinical_information",  # EHR
-    "clinical_domain": "general_health",
-    "primary_user": ["health_care_professional"],
-    "human_licensed_review": "yes_all_outputs",
-    "communication_channel": None,
-    "ai_role": "none",  # no AI
-    "decision_type": "documentation",
-    "independent_evaluation": "no",
-    "model_changes": "static",
+    "entity": "unlicensed",
+    "function_category": "triage_risk_scoring",
+    "content_type": "non_clinical_health_information",
+    "clinical_domain": "emergency_care",
+    "primary_user": "patient",
+    "human_licensed_review": "no",
+    "communication_channel": "chatbot",
+    "ai_role": "substantial_factor",
+    "decision_type": "triage",
+    "independent_evaluation": "yes",
+    "sensitive_information": "no",
+    "model_changes": "periodic_updates",
 }
 
 
 # --------------------------------------------------
-# CASE 3: BOTH APPLY
+# CASE 3: Texas licensed practitioner diagnostic use
 # --------------------------------------------------
 # Real world:
-# A Texas clinic:
-# - Stores patient medical records (EHR)
-# - Uses AI for diagnosis support
-# - Also communicates AI-generated treatment summaries to patients
-#
-# => HB149 disclosure + mental health prohibition logic may apply
-# => SB1188 EHR + AI diagnostic requirements apply
+# Expected:
+# - General AI deployment (Chapter 551)
+# - Chapter 552 PHI / IIHI exception surfaced
+# - Section 183.005 practitioner rule
 
-case_both = {
+case_tx_practitioner_diagnostic_use = {
     "jurisdiction": "TX",
-    "entity": "clinic",
+    "entity": "licensed",
     "function_category": "clinical_decision_support",
-    "content_type": "patient_clinical_information",  # EHR
+    "content_type": "patient_clinical_information",
     "clinical_domain": "general_health",
-    "primary_user": ["patient"],  # patient-facing
-    "human_licensed_review": "yes_some_outputs",
+    "primary_user": "health_care_professional",
+    "human_licensed_review": "yes",
+    "communication_channel": None,
+    "ai_role": "assistive",
+    "decision_type": "diagnosis",
+    "independent_evaluation": "yes",
+    "sensitive_information": "yes",
+    "model_changes": "periodic_updates",
+}
+
+
+# --------------------------------------------------
+# CASE 4: Texas commercial biometric capture
+# --------------------------------------------------
+# Real world:
+# Expected:
+# - Commercial biometric privacy (Section 503.001)
+# - General AI deployment (Chapter 551)
+
+case_tx_biometric_capture = {
+    "jurisdiction": "TX",
+    "entity": "unlicensed",
+    "function_category": "administrative_only",
+    "content_type": "administrative_only",
+    "clinical_domain": "general_health",
+    "primary_user": "administrator",
+    "human_licensed_review": "no",
+    "communication_channel": None,
+    "ai_role": "assistive",
+    "decision_type": "administrative",
+    "independent_evaluation": "no",
+    "sensitive_information": "no",
+    "model_changes": "static",
+    "uses_biometric_identifier": True,
+    "biometric_identifier_types": ["voiceprint"],
+    "is_commercial_biometric_use": True,
+}
+
+
+# --------------------------------------------------
+# CASE 5: Non-Texas should not match Texas rules
+# --------------------------------------------------
+# Real world:
+# Expected:
+# - No Texas matches
+
+case_non_tx = {
+    "jurisdiction": "CA",
+    "entity": "licensed",
+    "function_category": "clinical_decision_support",
+    "content_type": "patient_clinical_information",
+    "clinical_domain": "general_health",
+    "primary_user": "patient",
+    "human_licensed_review": "yes",
     "communication_channel": "portal_message",
     "ai_role": "assistive",
     "decision_type": "diagnosis",
-    "independent_evaluation": "partially",
-    "model_changes": "periodic_updates",
-}
-
-
-# --------------------------------------------------
-# CASE 4: NEITHER APPLIES
-# --------------------------------------------------
-# Real world:
-# A research institution using AI internally for cancer model training.
-# Not patient-facing. Not storing Texas patient EHR under covered entity.
-# Not deployed clinically.
-# => No HB149
-# => No SB1188
-
-case_none = {
-    "jurisdiction": "TX",
-    "entity": "research_institution",
-    "function_category": "research_only",
-    "content_type": "administrative_only",
-    "clinical_domain": "specialty",
-    "primary_user": ["researcher"],
-    "human_licensed_review": "no",
-    "communication_channel": None,
-    "ai_role": "assistive",
-    "decision_type": "other",
     "independent_evaluation": "yes",
+    "sensitive_information": "yes",
     "model_changes": "periodic_updates",
-}
-
-
-# --------------------------------------------------
-# CASE 5: Mental health + patient chatbot + EHR
-# HIGH RISK SCENARIO
-# --------------------------------------------------
-# Real world:
-# A Texas mental health clinic using:
-# - AI chatbot therapy assistant
-# - Storing medical records
-# - AI influencing treatment decisions
-#
-# This should trigger:
-# - HB149 §552.051 (disclosure)
-# - HB149 §552.052 (prohibition context proxy)
-# - SB1188 §183.002 (EHR)
-# - SB1188 §183.005 (AI diagnostic use)
-
-case_high_risk = {
-    "jurisdiction": "TX",
-    "entity": "health_system",
-    "function_category": "treatment_support",
-    "content_type": "patient_clinical_information",  # EHR
-    "clinical_domain": "mental_health",
-    "primary_user": ["patient"],
-    "human_licensed_review": "yes_some_outputs",
-    "communication_channel": "chatbot",
-    "ai_role": "substantial_factor",
-    "decision_type": "treatment",
-    "independent_evaluation": "no",
-    "model_changes": "continous_learning",
 }
 
 
@@ -157,11 +150,11 @@ def run_case(name, user_input):
 
 
 def main():
-    run_case("CASE 1: HB149 Only (AI Chatbot App)", case_hb149_only)
-    run_case("CASE 2: SB1188 Only (Clinic EHR)", case_183_only)
-    run_case("CASE 3: Both Apply (Clinic AI Diagnosis + Patient Comms)", case_both)
-    run_case("CASE 4: None Apply (Research Only)", case_none)
-    run_case("CASE 5: High Risk (Mental Health AI Clinic)", case_high_risk)
+    run_case("CASE 1: Texas Chatbot Disclosure", case_tx_chatbot_disclosure)
+    run_case("CASE 2: Texas Emergency Disclosure", case_tx_emergency_disclosure)
+    run_case("CASE 3: Texas Practitioner Diagnostic Use", case_tx_practitioner_diagnostic_use)
+    run_case("CASE 4: Texas Commercial Biometric Capture", case_tx_biometric_capture)
+    run_case("CASE 5: Non-Texas No Match", case_non_tx)
 
 
 if __name__ == "__main__":

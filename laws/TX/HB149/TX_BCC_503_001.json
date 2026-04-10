@@ -1,0 +1,55 @@
+{
+  "law_id": "TX_BCC_503_001",
+  "jurisdiction": "TX",
+  "citation": "Texas Business & Commerce Code §503.001",
+  "act": "HB 149",
+  "status": "active",
+  "law_type": "commercial_biometric_privacy",
+
+  "triggers": {
+    "tx_commercial_biometric_privacy": {
+      "description": "Commercial biometric identifier capture in Texas",
+      "all_of": [
+        { "field": "is_texas_jurisdiction", "op": "==", "value": true },
+        { "field": "uses_biometric_identifier", "op": "==", "value": true },
+        { "field": "is_commercial_biometric_use", "op": "==", "value": true }
+      ]
+    }
+  },
+
+  "obligations": [
+    {
+      "obligation_id": "BIOMETRIC_NOTICE_BEFORE_CAPTURE",
+      "applies_when": ["tx_commercial_biometric_privacy"],
+      "type": "notice_requirement",
+      "required": true,
+      "content": "Inform the individual before capturing the biometric identifier."
+    },
+    {
+      "obligation_id": "BIOMETRIC_CLEAR_AFFIRMATIVE_CONSENT",
+      "applies_when": ["tx_commercial_biometric_privacy"],
+      "type": "consent_requirement",
+      "required": true,
+      "content": "Obtain freely given, specific, informed, and unambiguous consent through a clear affirmative act before capture."
+    },
+    {
+      "obligation_id": "BIOMETRIC_TERMS_OF_USE_NOT_SUFFICIENT",
+      "applies_when": ["tx_commercial_biometric_privacy"],
+      "type": "consent_limitation",
+      "required": true,
+      "content": "Consent cannot be based only on broad terms of use."
+    },
+    {
+      "obligation_id": "BIOMETRIC_DARK_PATTERN_CONSENT_INVALID",
+      "applies_when": ["tx_commercial_biometric_privacy"],
+      "type": "consent_limitation",
+      "required": true,
+      "content": "Consent obtained through dark patterns is invalid."
+    }
+  ],
+
+  "notes": [
+    "Biometric identifier means retina scan, iris scan, fingerprint, voiceprint, or a record of hand or face geometry.",
+    "This check is independent from the Texas AI deployment, Chapter 552 disclosure, and practitioner diagnostic-use checks."
+  ]
+}
