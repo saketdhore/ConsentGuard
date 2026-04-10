@@ -1,5 +1,7 @@
 # app.py
 import os
+import re
+from html import escape
 import streamlit as st
 
 from engine.config import load_env_file
@@ -112,6 +114,210 @@ MODEL_CHANGES = ["static", "periodic_updates", "continuous_learning"]
 
 FORMAT_CONSTRAINT_VALUES = {item.value for item in FormatConstraintEnum}
 
+# ---------- Legal glossary / hover definitions ----------
+LEGAL_GLOSSARY = {
+    "artificial intelligence system": {
+        "short": "A machine-based system that infers from inputs to generate outputs.",
+        "full": (
+            '"Artificial intelligence system" means any machine-based system that, for any '
+            "explicit or implicit objective, infers from the inputs the system receives how to "
+            "generate outputs, including content, decisions, predictions, or recommendations, "
+            "that can influence physical or virtual environments."
+        ),
+        "source": "TX Bus & Comm §551.001",
+    },
+    "health care services": {
+        "short": "Services related to diagnosis, prevention, or treatment of human conditions.",
+        "full": (
+            "Health care services means services related to human health or to the diagnosis, "
+            "prevention, or treatment of a human disease or impairment provided by an individual "
+            "licensed, registered, or certified under applicable state or federal law."
+        ),
+        "source": "TX Bus & Comm §552.001",
+    },
+    "health care practitioner": {
+        "short": "An individual authorized in Texas to provide health care services.",
+        "full": (
+            "Health care practitioner means an individual who is licensed, certified, or "
+            "otherwise authorized to provide health care services in this state."
+        ),
+        "source": "TX Health & Safety Code §183.001",
+    },
+    "consumer": {
+        "short": "A Texas resident acting in a personal or household context.",
+        "full": (
+            '"Consumer" means an individual who is a resident of this state acting only in an '
+            "individual or household context. It does not include an individual acting in a "
+            "commercial or employment context."
+        ),
+        "source": "TX Bus & Comm §541.001 (as referenced in AI chapters)",
+    },
+    "person": {
+        "short": "A business/developer/deployer operating or offering services in Texas.",
+        "full": (
+            '"Person" includes one who (1) promotes, advertises, or conducts business in Texas; '
+            "(2) produces a product or service used by Texas residents; or (3) develops or "
+            "deploys an artificial intelligence system in Texas."
+        ),
+        "source": "TX Bus & Comm §551.001",
+    },
+    "biometric identifier": {
+        "short": "Retina/iris scan, fingerprint, voiceprint, or hand/face geometry.",
+        "full": (
+            '"Biometric identifier" means a retina or iris scan, fingerprint, voiceprint, or '
+            "record of hand or face geometry."
+        ),
+        "source": "TX Bus & Comm §503.001",
+    },
+    "consent": {
+        "short": "Clear affirmative, freely given, specific, informed, unambiguous agreement.",
+        "full": (
+            '"Consent" means a clear affirmative act signifying freely given, specific, informed, '
+            "and unambiguous agreement. It does not include broad terms acceptance, passive "
+            "actions (hover/mute/pause/close), or agreement obtained through dark patterns."
+        ),
+        "source": "TX Bus & Comm §541.001",
+    },
+    "dark pattern": {
+        "short": "UI design that impairs user autonomy, choice, or decision-making.",
+        "full": (
+            '"Dark pattern" means a user interface designed or manipulated with the effect of '
+            "substantially subverting or impairing user autonomy, decision-making, or choice, "
+            "including practices the FTC refers to as dark patterns."
+        ),
+        "source": "TX Bus & Comm §541.001",
+    },
+    "protected health information": {
+        "short": "Confidential health info that may be exempt from Chapter 552 disclosure.",
+        "full": (
+            "Protected health information and individually identifiable health information may be "
+            "confidential and not subject to disclosure under Chapter 552 (see Sec. 182.103)."
+        ),
+        "source": "TX Health & Safety Code §182.103",
+    },
+    "plain language": {
+        "short": "Disclosure must be understandable and not obscured.",
+        "full": (
+            "For applicable Texas AI disclosure obligations, disclosure must be written in plain "
+            "language and presented clearly and conspicuously."
+        ),
+        "source": "TX Bus & Comm §552.051",
+    },
+    "clear and conspicuous": {
+        "short": "Prominent disclosure that is difficult to miss.",
+        "full": (
+            "Where required, disclosure must be clear and conspicuous, including when provided by "
+            "hyperlink to a separate page."
+        ),
+        "source": "TX Bus & Comm §552.051",
+    },
+    "reasonable notice": {
+        "short": "Notice to state agencies about use/contemplated use of AI systems.",
+        "full": (
+            "Texas law requires reasonable notice regarding the use or contemplated use of AI "
+            "systems by state agencies in relevant contexts."
+        ),
+        "source": "TX Bus & Comm §551.003",
+    },
+}
+
+HEAVY_OPTION_DEFINITIONS = {
+    "function_category": {
+        "triage_risk_scoring": {
+            "short": "Uses AI to prioritize urgency or estimate likelihood of adverse outcomes.",
+            "full": (
+                "Operational definition: AI-assisted triage/risk scoring sorts patients or cases "
+                "by urgency and may generate risk estimates that influence how quickly care is "
+                "delivered or escalated."
+            ),
+            "source": "Operational definition for workflow context",
+            "pending_review": True,
+        },
+        "clinical_decision_support": {
+            "short": "AI provides recommendations that inform clinical judgment.",
+            "full": (
+                "Operational definition: Clinical decision support uses AI outputs to support "
+                "diagnosis, treatment planning, or care pathway decisions while clinicians remain "
+                "responsible for final medical judgment."
+            ),
+            "source": "Operational definition for workflow context",
+            "pending_review": True,
+        },
+        "treatment_support": {
+            "short": "AI assists with treatment selection, adjustment, or care recommendations.",
+            "full": (
+                "Operational definition: Treatment support includes AI-generated suggestions "
+                "about interventions, medication plans, or follow-up care based on available "
+                "clinical information."
+            ),
+            "source": "Operational definition for workflow context",
+            "pending_review": True,
+        },
+    },
+    "decision_type": {
+        "diagnosis": {
+            "short": "Identifying a disease, condition, or impairment from available information.",
+            "full": (
+                "Operational definition: Diagnosis is the process of determining what condition a "
+                "patient has, including differential assessment and confirmation workflows."
+            ),
+            "source": "Operational definition aligned to TX HS §183.005 context",
+            "pending_review": True,
+        },
+        "triage": {
+            "short": "Prioritizing patients by urgency and required speed of intervention.",
+            "full": (
+                "Operational definition: Triage classifies severity/risk to determine care "
+                "priority, escalation path, and response timing."
+            ),
+            "source": "Operational definition for emergency/general care workflows",
+            "pending_review": True,
+        },
+        "treatment": {
+            "short": "Selecting or recommending interventions to manage a condition.",
+            "full": (
+                "Operational definition: Treatment decisions include selecting, modifying, or "
+                "stopping therapies and related care plans."
+            ),
+            "source": "Operational definition aligned to TX HS §183.005 context",
+            "pending_review": True,
+        },
+    },
+    "primary_user": {
+        "patient": {
+            "short": "The individual receiving care or health-related services.",
+            "full": (
+                "Operational definition: Patient refers to the person whose care, records, or "
+                "health status is directly affected by the AI-assisted workflow."
+            ),
+            "source": "Operational definition for healthcare workflow context",
+            "pending_review": True,
+        },
+        "health_care_professional": {
+            "short": "A licensed or authorized professional involved in care delivery.",
+            "full": (
+                "In this workflow, this aligns with health care practitioner concepts used in "
+                "Texas statutes."
+            ),
+            "source": "TX Health & Safety Code §183.001 (practitioner concept)",
+        },
+        "care_team": {
+            "short": "Clinical staff collaborating to deliver or coordinate patient care.",
+            "full": (
+                "Operational definition: Care team includes clinicians and support staff who "
+                "contribute to diagnosis, treatment, monitoring, or care coordination."
+            ),
+            "source": "Operational definition for healthcare workflow context",
+            "pending_review": True,
+        },
+    },
+}
+
+_LEGAL_TERM_KEYS_SORTED = sorted(LEGAL_GLOSSARY.keys(), key=len, reverse=True)
+_LEGAL_PATTERN = re.compile(
+    r"(?i)\b(" + "|".join(re.escape(term) for term in _LEGAL_TERM_KEYS_SORTED) + r")\b"
+)
+
 
 # ---------- Pretty label helpers ----------
 def pretty_label(s):
@@ -124,6 +330,104 @@ def label_map(options, overrides=None):
     labels = [to_label[v] for v in options]
     to_value = {to_label[v]: v for v in options}
     return labels, to_value, to_label
+
+
+def extract_matched_legal_terms(text):
+    if not text:
+        return set()
+    return {
+        match.group(0).lower()
+        for match in _LEGAL_PATTERN.finditer(text)
+        if match.group(0).lower() in LEGAL_GLOSSARY
+    }
+
+
+def build_definition_tooltip_span(display_text, definition, unique_hint=""):
+    short = escape(definition.get("short", "Definition unavailable."))
+    full = escape(definition.get("full", "Definition unavailable."))
+    source = escape(definition.get("source", "Source pending"))
+    pending = bool(definition.get("pending_review"))
+    term_id = f"cg-def-{abs(hash((display_text.lower(), unique_hint, full))) % 10_000_000}"
+    pending_badge = (
+        "<span class='cg-pending-badge'>Pending legal review</span>" if pending else ""
+    )
+    return (
+        "<span class='cg-term'>"
+        f"{escape(display_text)}"
+        "<span class='cg-tooltip'>"
+        f"<span class='cg-short'>{short}</span>"
+        "<span class='cg-expand'>"
+        f"<input type='checkbox' id='{term_id}' class='cg-expand-toggle' />"
+        f"<label for='{term_id}' class='cg-expand-label'>&#9654; Full definition</label>"
+        "<span class='cg-full'>"
+        f"{full}"
+        f"<span class='cg-source'>Source: {source}</span>"
+        f"{pending_badge}"
+        "</span>"
+        "</span>"
+        "</span>"
+        "</span>"
+    )
+
+
+def annotate_legal_terms(text, max_per_term=None, skip_terms=None):
+    if not text:
+        return ""
+
+    seen_terms = set()
+    skip_terms = {term.lower() for term in (skip_terms or set())}
+
+    def repl(match):
+        raw = match.group(0)
+        key = raw.lower()
+        if key not in LEGAL_GLOSSARY:
+            return escape(raw)
+        if key in skip_terms:
+            return escape(raw)
+        if max_per_term == 1 and key in seen_terms:
+            return escape(raw)
+        seen_terms.add(key)
+        return build_definition_tooltip_span(
+            display_text=raw,
+            definition=LEGAL_GLOSSARY[key],
+            unique_hint=f"{match.start()}-{key}",
+        )
+
+    return _LEGAL_PATTERN.sub(repl, text)
+
+
+def legal_md(text, small=False, max_per_term=None, skip_terms=None, track_question_terms=False):
+    if small and max_per_term is None:
+        max_per_term = 1
+    if track_question_terms:
+        known = st.session_state.get("question_defined_terms", set())
+        known.update(extract_matched_legal_terms(text))
+        st.session_state.question_defined_terms = known
+    body = annotate_legal_terms(text, max_per_term=max_per_term, skip_terms=skip_terms)
+    if small:
+        st.markdown(
+            f"<div class='cg-caption'>{body}</div>",
+            unsafe_allow_html=True,
+        )
+        return
+    st.markdown(body, unsafe_allow_html=True)
+
+
+def render_selected_option_definition(field_key, selected_value, to_label_map):
+    defs_for_field = HEAVY_OPTION_DEFINITIONS.get(field_key, {})
+    definition = defs_for_field.get(selected_value)
+    if not definition:
+        return
+    label = to_label_map.get(selected_value, pretty_label(selected_value))
+    tooltip = build_definition_tooltip_span(
+        display_text=label,
+        definition=definition,
+        unique_hint=f"{field_key}-{selected_value}",
+    )
+    st.markdown(
+        f"<div class='cg-caption cg-option-def'>Selected option meaning: {tooltip}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # ---------- Optional label overrides (UI only) ----------
@@ -282,6 +586,8 @@ if "document_validation" not in st.session_state:
     st.session_state.document_validation = None
 if "document_generation_error" not in st.session_state:
     st.session_state.document_generation_error = None
+if "question_defined_terms" not in st.session_state:
+    st.session_state.question_defined_terms = set()
 
 view = st.session_state.view
 form_data = st.session_state.form_data
@@ -317,6 +623,7 @@ def clear_document_workflow_state():
     st.session_state.generated_document = None
     st.session_state.document_validation = None
     st.session_state.document_generation_error = None
+    st.session_state.question_defined_terms = set()
 
 
 def parse_data_used_text(value):
@@ -523,18 +830,24 @@ def render_generated_document_preview(document):
             st.markdown("Signature: __________________")
 
 
-# ---------- Styling (warm cream, yellow accent, blue CTA) ----------
-BG_CREAM = "#FCF8ED"
-YELLOW_ACCENT = "#EAB308"
-YELLOW_LIGHT = "#FEF3C7"
-BLUE_CTA = "#2563eb"
-SIDEBAR_BG = "#f3f4f6"
+# ---------- Styling (professional brand palette) ----------
+BG_CREAM = "#F3F6FB"
+YELLOW_ACCENT = "#0EA5E9"
+YELLOW_LIGHT = "#E0F2FE"
+BLUE_CTA = "#1D4ED8"
+SIDEBAR_BG = "#EEF3FA"
 # Conditional CSS: landing vs wizard
 if view == "landing":
     st.markdown(
         f"""
         <style>
-        .stApp {{ background: {BG_CREAM}; min-height: 100vh; display: flex; flex-direction: column; }}
+        .stApp {{
+            background: radial-gradient(1200px 700px at 10% -5%, #dbeafe 0%, #eff6ff 36%, {BG_CREAM} 85%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #0f172a;
+        }}
         section[data-testid="stSidebar"] {{ display: none; }}
         header[data-testid="stHeader"] {{ display: none; }}
         /* Chain flex centering so stMainBlockContainer is centered on page (every wrapper participates) */
@@ -543,29 +856,38 @@ if view == "landing":
         .stApp > div > div > div {{ flex: 1; display: flex !important; align-items: center !important; justify-content: center !important; min-height: 0; }}
         .stApp section {{ flex: 1; display: flex !important; align-items: center !important; justify-content: center !important; min-height: 0; }}
         [data-testid="stMainBlockContainer"] {{
-            max-width: 60%;
-            width: 60%;
-            height: 80vh;
+            max-width: 62%;
+            width: 62%;
+            min-height: 72vh;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 2.5rem 2rem;
             background: #ffffff;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            border: 1px solid #dbe4f2;
+            border-radius: 6px;
+            box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
         }}
+        [data-testid="stMainBlockContainer"] h1 {{
+            color: #0f172a;
+            letter-spacing: -0.02em;
+            font-weight: 700;
+            margin-bottom: 0.35rem;
+        }}
         [data-testid="stMainBlockContainer"] #consent-guard {{ text-align: center; }}
         [data-testid="stMainBlockContainer"] .stButton {{ display: flex; justify-content: center; }}
         .stButton > button[kind="primary"] {{
-            background: {BLUE_CTA} !important;
+            background: linear-gradient(135deg, {BLUE_CTA} 0%, #2563eb 100%) !important;
             color: white !important;
-            border-radius: 12px !important;
-            border: none !important;
-            padding: 0.5rem 1.5rem !important;
+            border-radius: 4px !important;
+            border: 1px solid #1e40af !important;
+            padding: 0.58rem 1.6rem !important;
             font-weight: 600 !important;
+            letter-spacing: 0.01em;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
         }}
         </style>
         """,
@@ -575,12 +897,30 @@ elif view == "results":
     st.markdown(
         f"""
         <style>
-        .stApp {{ background: #ffffff; }}
+        .stApp {{
+            background: linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%);
+            color: #0f172a;
+        }}
         section[data-testid="stSidebar"] {{ display: none; }}
         header[data-testid="stHeader"] {{ display: none; }}
-        .block-container {{ padding: 2rem 1rem; max-width: 65%; margin: 0 auto; }}
-        .stButton > button[kind="primary"] {{ background: {BLUE_CTA} !important; color: white !important; border-radius: 12px !important; }}
-        details {{ border-radius: 10px; }}
+        .block-container {{
+            padding: 2.2rem 1.1rem;
+            max-width: 70%;
+            margin: 0 auto;
+        }}
+        .stButton > button[kind="primary"] {{
+            background: linear-gradient(135deg, {BLUE_CTA} 0%, #2563eb 100%) !important;
+            color: white !important;
+            border-radius: 4px !important;
+            border: 1px solid #1e40af !important;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+        }}
+        details {{
+            border-radius: 4px;
+            border: 1px solid #dbe4f2;
+            background: #ffffff;
+            padding: 0.2rem 0.5rem;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -590,78 +930,106 @@ else:
         f"""
         <style>
         @keyframes overlayFadeIn {{
-            from {{ opacity: 0; transform: translateY(20px); }}
+            from {{ opacity: 0; transform: translateY(12px); }}
             to {{ opacity: 1; transform: translateY(0); }}
         }}
         /* No gray bar: hide Streamlit header */
         header[data-testid="stHeader"] {{ display: none; }}
         section[data-testid="stSidebar"] {{ display: none; }}
-        /* Question pages: cream background (same as home), white overlay */
-        .stApp {{ background: {BG_CREAM}; }}
-        /* Wizard: single white overlay, 75% width, rounded corners, entrance animation */
+        .stApp {{
+            background: linear-gradient(180deg, #f7faff 0%, {BG_CREAM} 100%);
+            color: #0f172a;
+        }}
         .block-container {{
-            padding: 2rem 1rem;
+            padding: 2rem 1rem 1.5rem 1rem;
             max-width: 75%;
             margin: 0 auto;
             background: #ffffff;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            border-radius: 6px;
+            border: 1px solid #dbe4f2;
+            box-shadow: 0 20px 42px rgba(15, 23, 42, 0.08);
             animation: overlayFadeIn 0.45s ease-out;
         }}
-        /* Progress nav: no rounded edges, clear right border (line between nav and content) */
         .block-container > div > div:first-child {{
             background: {SIDEBAR_BG};
-            padding: 1rem 0.75rem 0 0.75rem;
-            border-radius: 12px 0 0 12px;
-            border-right: 2px solid #c4c4c4;
+            padding: 1rem 0.75rem 0.35rem 0.75rem;
+            border-radius: 4px;
+            border: 1px solid #d7e2f1;
         }}
-        /* Nav bar: connected buttons, no rounded edges, clean lines */
         .block-container > div > div:first-child .stButton {{
             width: 100%;
-            margin: 0;
+            margin: 0.1rem 0;
         }}
         .block-container > div > div:first-child .stButton > button {{
             width: 100%;
             text-align: left;
-            padding: 0.5rem 0.75rem;
+            padding: 0.48rem 0.66rem;
             margin: 0;
-            border-radius: 0;
-            font-size: 0.9rem;
-            border: none;
-            border-bottom: 1px solid #e5e7eb;
+            border-radius: 4px;
+            font-size: 0.86rem;
+            border: 1px solid transparent;
             background: transparent;
-        }}
-        .block-container > div > div:first-child .stButton:last-child > button {{
-            border-bottom: none;
+            color: #334155;
         }}
         .block-container > div > div:first-child .stButton > button:hover {{
-            background: #e5e7eb;
+            background: #e2e8f0;
+            border: 1px solid #c7d6ea;
+            color: #0f172a;
         }}
-        /* Main content column (already white, match overlay) */
         .block-container > div > div:nth-child(2) {{
             background: #ffffff;
-            border-radius: 0 12px 12px 0;
+            border-radius: 4px;
             box-shadow: none;
-            padding: 2rem;
+            padding: 1.85rem 2rem;
+            margin-left: 0.85rem;
         }}
-        .step-indicator {{ color: {YELLOW_ACCENT}; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }}
+        .step-indicator {{
+            color: #0369a1;
+            background: {YELLOW_LIGHT};
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid #bae6fd;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            margin-bottom: 0.7rem;
+        }}
+        h3 {{
+            color: #0f172a;
+            letter-spacing: -0.01em;
+            margin-bottom: 0.3rem;
+        }}
         .stButton > button[kind="primary"] {{
-            background: {BLUE_CTA} !important;
+            background: linear-gradient(135deg, {BLUE_CTA} 0%, #2563eb 100%) !important;
             color: white !important;
-            border-radius: 12px !important;
-            border: none !important;
-            padding: 0.5rem 1.5rem !important;
+            border-radius: 4px !important;
+            border: 1px solid #1e40af !important;
+            padding: 0.52rem 1.5rem !important;
             font-weight: 600 !important;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
         }}
         .stButton > button:not([kind="primary"]) {{
-            border-radius: 12px !important;
-            border: 1px solid #d1d5db !important;
-            color: #6b7280 !important;
+            border-radius: 4px !important;
+            border: 1px solid #cfdced !important;
+            color: #475569 !important;
+            background: #ffffff !important;
         }}
-        div[data-testid="stSelectbox"] div {{ border-radius: 10px !important; }}
-        div[data-testid="stMultiSelect"] div {{ border-radius: 10px !important; }}
-        div[data-testid="stVerticalBlock"] {{ gap: 0.5rem; }}
-        details {{ border-radius: 10px; }}
+        div[data-testid="stSelectbox"] div {{
+            border-radius: 4px !important;
+        }}
+        div[data-testid="stSelectbox"] > div[data-baseweb="select"] {{
+            border: 1px solid #cfdaeb !important;
+            box-shadow: 0 2px 0 rgba(15, 23, 42, 0.02);
+        }}
+        div[data-testid="stSelectbox"] > div[data-baseweb="select"]:focus-within {{
+            border-color: #60a5fa !important;
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2) !important;
+        }}
+        div[data-testid="stMultiSelect"] div {{ border-radius: 4px !important; }}
+        div[data-testid="stVerticalBlock"] {{ gap: 0.45rem; }}
+        details {{ border-radius: 4px; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -670,9 +1038,117 @@ else:
     if (isinstance(view, int) and 1 <= view <= 11) or view == "review":
         cur = get_current_step()
         st.markdown(
-            f"<style>.block-container > div > div:first-child div[data-testid='stVerticalBlock'] > div:nth-child({cur + 3}) button {{ background: {YELLOW_ACCENT} !important; color: white !important; border: none !important; border-radius: 0 !important; }}</style>",
+            f"<style>.block-container > div > div:first-child div[data-testid='stVerticalBlock'] > div:nth-child({cur + 3}) button {{ background: {YELLOW_LIGHT} !important; color: #0c4a6e !important; border: 1px solid #7dd3fc !important; border-radius: 4px !important; font-weight: 700 !important; }}</style>",
             unsafe_allow_html=True,
         )
+
+# Global legal hover styles
+st.markdown(
+    """
+    <style>
+    .cg-caption {
+        color: #475569;
+        font-size: 0.9rem;
+        margin-top: -0.25rem;
+        margin-bottom: 0.6rem;
+        line-height: 1.4;
+    }
+    .cg-term {
+        position: relative;
+        display: inline-block;
+        font-weight: 600;
+        border-bottom: 1px dotted #60a5fa;
+        cursor: help;
+        color: #334155;
+    }
+    .cg-tooltip {
+        display: none;
+        position: absolute;
+        left: 0;
+        top: 1.35rem;
+        z-index: 999;
+        width: 340px;
+        max-width: 48vw;
+        background: #ffffff;
+        border: 1px solid #d6e3f2;
+        border-radius: 4px;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+        padding: 0.6rem 0.7rem;
+        color: #111827;
+        font-weight: 400;
+    }
+    .cg-term:hover .cg-tooltip { display: block; }
+    .cg-tooltip .cg-short {
+        font-size: 0.86rem;
+        line-height: 1.35;
+        margin-bottom: 0.35rem;
+        display: block;
+        color: #0f172a;
+    }
+    .cg-expand {
+        display: block;
+    }
+    .cg-expand-toggle {
+        display: none;
+    }
+    .cg-expand-label {
+        font-size: 0.78rem;
+        color: #1e3a8a;
+        cursor: pointer;
+        margin-bottom: 0.2rem;
+        display: inline-block;
+        user-select: none;
+    }
+    .cg-expand-toggle:checked + .cg-expand-label {
+        margin-bottom: 0.28rem;
+    }
+    .cg-expand-toggle:checked + .cg-expand-label::before {
+        content: "▼ ";
+    }
+    .cg-expand-toggle:not(:checked) + .cg-expand-label::before {
+        content: "";
+    }
+    .cg-tooltip .cg-full {
+        font-size: 0.78rem;
+        line-height: 1.35;
+        color: #334155;
+        display: block;
+        display: none;
+    }
+    .cg-expand-toggle:checked + .cg-expand-label + .cg-full {
+        display: block;
+    }
+    .cg-source {
+        display: block;
+        margin-top: 0.35rem;
+        font-size: 0.74rem;
+        color: #4b5563;
+    }
+    .cg-pending-badge {
+        display: inline-block;
+        margin-top: 0.35rem;
+        padding: 0.12rem 0.4rem;
+        border-radius: 999px;
+        border: 1px solid #f59e0b;
+        color: #92400e;
+        background: #fffbeb;
+        font-size: 0.68rem;
+        font-weight: 600;
+    }
+    .cg-option-def {
+        margin-top: 0.25rem;
+        margin-bottom: 0.4rem;
+    }
+    .stButton > button:focus-visible,
+    div[data-baseweb="select"]:focus-within,
+    details:focus-within {
+        outline: 2px solid #1d4ed8 !important;
+        outline-offset: 1px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def save_and_next(step_num, **updates):
@@ -748,13 +1224,21 @@ if view == 1:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 1/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Where is the system deployed?")
-            st.caption("This determines which laws apply. Texas rules are populated today; other jurisdictions currently return no matches.")
+            legal_md(
+                "Jurisdiction determines whether these Texas triggers apply. Texas rules are evaluated when deployment or use occurs in this state.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             idx = JUR_LABELS.index(JUR_TO_LABEL.get(form_data.get("jurisdiction", "TX"), JUR_LABELS[0]))
             sel_jur = st.selectbox("Jurisdiction", JUR_LABELS, index=idx, key="step1_jurisdiction", label_visibility="collapsed")
             st.markdown("---")
             st.markdown("### What kind of organization is deploying or operating the system?")
-            st.caption("Select whether the deploying organization is licensed, unlicensed, or not sure.")
+            legal_md(
+                "Entity status helps assess when a health care practitioner is implicated and whether practitioner-specific obligations may apply.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             ent_val = form_data.get("entity", ENTITY[0])
             ent_label = ENTITY_TO_LABEL.get(ent_val, ENTITY_LABELS[0])
@@ -795,12 +1279,21 @@ if view == 2:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 2/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### What is the AI used for?")
-            st.caption("e.g. patient communication, clinical decision support (CDS), imaging, triage, documentation.")
+            legal_md(
+                "Function determines whether the artificial intelligence system is consumer-facing, health-care related, or used for diagnostic or treatment support.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("function_category", FUNCTION_CATEGORY[0])
             label = FUNC_TO_LABEL.get(val, FUNC_LABELS[0])
             idx = FUNC_LABELS.index(label) if label in FUNC_LABELS else 0
             sel = st.selectbox("Function", FUNC_LABELS, index=idx, key="step2_func", label_visibility="collapsed")
+            render_selected_option_definition(
+                field_key="function_category",
+                selected_value=FUNC_TO_VAL[sel],
+                to_label_map=FUNC_TO_LABEL,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -836,7 +1329,11 @@ if view == 3:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 3/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### What kind of information does the system process or produce?")
-            st.caption("EHR (patient clinical information), non-clinical health information, or administrative only.")
+            legal_md(
+                "Data category helps evaluate confidentiality and disclosure obligations, including whether protected health information may qualify for a disclosure exception.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("content_type", CONTENT_TYPE[0])
             label = CONTENT_TO_LABEL.get(val, CONTENT_LABELS[0])
@@ -844,7 +1341,11 @@ if view == 3:
             sel = st.selectbox("Content", CONTENT_LABELS, index=idx, key="step3_content", label_visibility="collapsed")
             st.markdown("---")
             st.markdown("### Does the input include sensitive information?")
-            st.caption("Includes financial, medical, or patient privacy information.")
+            legal_md(
+                "Sensitive inputs can increase compliance risk and affect downstream disclosure drafting and safeguards.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             sensitive_val = form_data.get("sensitive_information", SENSITIVE_INFORMATION[0])
             sensitive_label = SENSITIVE_TO_LABEL.get(sensitive_val, SENSITIVE_LABELS[0])
@@ -885,7 +1386,11 @@ if view == 4:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 4/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Which clinical area is this related to?")
-            st.caption("e.g. general health, mental health, emergency care, wellness/care coordination, or specialty care.")
+            legal_md(
+                "Clinical domain affects timing rules for required disclosure, especially for emergency care where disclosure may be provided as soon as reasonably possible.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("clinical_domain", CLINICAL_DOMAIN[0])
             label = DOMAIN_TO_LABEL.get(val, DOMAIN_LABELS[0])
@@ -926,7 +1431,11 @@ if view == 5:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 5/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Who directly receives or views the system output?")
-            st.caption("Select the primary audience for the system output.")
+            legal_md(
+                "Primary audience helps determine consumer-facing disclosure obligations, including situations where disclosure is required even if AI use appears obvious.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             default_value = form_data.get("primary_user", "patient")
             if isinstance(default_value, list):
@@ -934,6 +1443,11 @@ if view == 5:
             default_label = USER_TO_LABEL.get(default_value, USER_LABELS[0])
             idx = USER_LABELS.index(default_label) if default_label in USER_LABELS else 0
             sel = st.selectbox("Users", USER_LABELS, index=idx, key="step5_user", label_visibility="collapsed")
+            render_selected_option_definition(
+                field_key="primary_user",
+                selected_value=USER_TO_VAL[sel],
+                to_label_map=USER_TO_LABEL,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -969,7 +1483,11 @@ if view == 6:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 6/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Does a licensed clinician review AI outputs before they affect care?")
-            st.caption("Whether a licensed clinician reviews AI outputs before they affect care.")
+            legal_md(
+                "Licensed review is relevant for diagnostic/treatment use and practitioner duties, including reviewing AI-created records under applicable standards.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("human_licensed_review", "no")
             label = REVIEW_TO_LABEL.get(val, REVIEW_LABELS[0])
@@ -1027,7 +1545,11 @@ if view == 7:
                         save_and_next(7, communication_channel=None)
                 st.stop()
 
-            st.caption("e.g. chatbot, portal message, email, audio, video, or in-person support.")
+            legal_md(
+                "Interaction channel informs whether disclosure presentation remains clear and conspicuous and supports compliant delivery timing.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("communication_channel")
             if val is not None:
@@ -1071,7 +1593,11 @@ if view == 8:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 8/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### How much does the AI influence the outcome?")
-            st.caption("From assistive (human reviews and decides) to autonomous (AI decides without approval).")
+            legal_md(
+                "Influence level is retained as operational context to support risk transparency and future model refinement, even when not a standalone statutory trigger.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("ai_role", "assistive")
             label = AIROLE_TO_LABEL.get(val, AIROLE_LABELS[0])
@@ -1112,12 +1638,21 @@ if view == 9:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 9/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### What type of decision does the system support?")
-            st.caption("e.g. diagnosis, treatment, triage, monitoring alert, documentation, or administrative.")
+            legal_md(
+                "Decision type identifies whether use involves diagnosis, triage, or treatment recommendations tied to practitioner disclosure and record-review obligations.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("decision_type", "administrative")
             label = DECISION_TO_LABEL.get(val, DECISION_LABELS[0])
             idx = DECISION_LABELS.index(label) if label in DECISION_LABELS else 0
             sel = st.selectbox("Decision", DECISION_LABELS, index=idx, key="step9_decision", label_visibility="collapsed")
+            render_selected_option_definition(
+                field_key="decision_type",
+                selected_value=DECISION_TO_VAL[sel],
+                to_label_map=DECISION_TO_LABEL,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1153,7 +1688,11 @@ if view == 10:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 10/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Has the system been independently tested or validated?")
-            st.caption("Whether the system has been independently tested or validated (internal or external).")
+            legal_md(
+                "Validation status is captured as policy and training context for future legal model improvements.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("independent_evaluation", "no")
             label = IEVAL_TO_LABEL.get(val, IEVAL_LABELS[0])
@@ -1194,7 +1733,11 @@ if view == 11:
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 11/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### How does the model change over time?")
-            st.caption("Static (fixed), periodic updates, or continuous learning.")
+            legal_md(
+                "Model change cadence is captured as policy and training context for future legal model improvements.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             val = form_data.get("model_changes", MODEL_CHANGES[0])
             label = MODEL_TO_LABEL.get(val, MODEL_LABELS[0])
@@ -1235,7 +1778,11 @@ if view == "review":
         with center:
             st.markdown(f"<p class='step-indicator'>STEP 12/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Review your choices")
-            st.caption("Confirm your answers below, then submit to run the compliance analysis.")
+            legal_md(
+                "Confirm the trigger facts below before running compliance analysis and generating disclosure obligations.",
+                small=True,
+                track_question_terms=True,
+            )
             st.markdown("<br>", unsafe_allow_html=True)
             entity_label = ENTITY_TO_LABEL.get(form_data.get("entity"), "")
             func_label = FUNC_TO_LABEL.get(form_data.get("function_category"), "")
@@ -1298,6 +1845,7 @@ if view == "results":
 
     matched = result.get("matched_laws", [])
     result_facts = result.get("facts", {})
+    terms_defined_in_questions = st.session_state.get("question_defined_terms", set())
 
     if not matched:
         st.warning("No applicable laws triggered for these inputs.")
@@ -1309,7 +1857,10 @@ if view == "results":
     else:
         with st.expander("Relevant laws (sections that apply)", expanded=True):
             for law in matched:
-                st.markdown(f"- **{format_law_label(law)}**")
+                legal_md(
+                    f"- **{format_law_label(law)}**",
+                    skip_terms=terms_defined_in_questions,
+                )
 
         with st.expander("Obligations (what you should do)", expanded=True):
             any_ob = False
@@ -1317,9 +1868,15 @@ if view == "results":
                 obs = collect_obligations(law)
                 if obs:
                     any_ob = True
-                    st.markdown(f"**{format_law_label(law)}**")
+                    legal_md(
+                        f"**{format_law_label(law)}**",
+                        skip_terms=terms_defined_in_questions,
+                    )
                     for item in dedupe_preserve_order(obs):
-                        st.markdown(f"- {item}")
+                        legal_md(
+                            f"- {item}",
+                            skip_terms=terms_defined_in_questions,
+                        )
                     st.markdown("")
             if not any_ob:
                 st.write("No obligations for this scenario.")
@@ -1330,9 +1887,15 @@ if view == "results":
                 pbs = collect_prohibitions(law)
                 if pbs:
                     any_pb = True
-                    st.markdown(f"**{format_law_label(law)}**")
+                    legal_md(
+                        f"**{format_law_label(law)}**",
+                        skip_terms=terms_defined_in_questions,
+                    )
                     for item in dedupe_preserve_order(pbs):
-                        st.markdown(f"- {item}")
+                        legal_md(
+                            f"- {item}",
+                            skip_terms=terms_defined_in_questions,
+                        )
                     st.markdown("")
             if not any_pb:
                 st.write("No prohibitions for this scenario.")
