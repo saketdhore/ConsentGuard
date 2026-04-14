@@ -45,7 +45,7 @@ STEP_KEYWORDS = [
 ]
 
 # ---------- Canonical enum options (DO NOT change these) ----------
-JURISDICTION = ["CA", "IL", "TX", "CO", "UT"]
+JURISDICTION = ["TX"]
 
 ENTITY = ["licensed", "unlicensed", "not_sure"]
 
@@ -113,6 +113,11 @@ SENSITIVE_INFORMATION = ["yes", "no"]
 MODEL_CHANGES = ["static", "periodic_updates", "continuous_learning"]
 
 FORMAT_CONSTRAINT_VALUES = {item.value for item in FormatConstraintEnum}
+
+# Survey / intake UX (placeholder + N/A; engine accepts n_a via StrEnum)
+NA_VALUE = "n_a"
+PLACEHOLDER_LABEL = "Select…"
+NA_UI_LABEL = "N/A (does not apply)"
 
 # ---------- Legal glossary / hover definitions ----------
 LEGAL_GLOSSARY = {
@@ -414,6 +419,8 @@ def legal_md(text, small=False, max_per_term=None, skip_terms=None, track_questi
 
 
 def render_selected_option_definition(field_key, selected_value, to_label_map):
+    if selected_value in (None, NA_VALUE):
+        return
     defs_for_field = HEAVY_OPTION_DEFINITIONS.get(field_key, {})
     definition = defs_for_field.get(selected_value)
     if not definition:
@@ -459,6 +466,8 @@ HUMAN_REVIEW_OVERRIDES = {
     "yes": "Yes",
     "no": "No",
 }
+
+JURISDICTION_OVERRIDES = {"TX": "Texas"}
 
 ENTITY_OVERRIDES = {
     "licensed": "Licensed",
@@ -523,7 +532,8 @@ def dedupe_preserve_order(items):
 
 
 def get_law_paths(jurisdiction):
-    laws_dir = f"{LAWS_ROOT}/{jurisdiction}"
+    """Rule packs ship under TX; engine still gates matches on derived jurisdiction facts."""
+    laws_dir = f"{LAWS_ROOT}/TX"
     enforcement_dir = f"{laws_dir}/enforcement"
     return laws_dir, enforcement_dir
 
@@ -531,19 +541,19 @@ def get_law_paths(jurisdiction):
 # ---------- Default form data ----------
 def get_default_form_data():
     return {
-        "jurisdiction": "TX",
-        "entity": "licensed",
-        "function_category": FUNCTION_CATEGORY[0],
-        "content_type": CONTENT_TYPE[0],
-        "clinical_domain": CLINICAL_DOMAIN[0],
-        "primary_user": "patient",
-        "human_licensed_review": "no",
+        "jurisdiction": None,
+        "entity": None,
+        "function_category": None,
+        "content_type": None,
+        "clinical_domain": None,
+        "primary_user": None,
+        "human_licensed_review": None,
         "communication_channel": None,
-        "ai_role": "assistive",
-        "decision_type": "administrative",
-        "independent_evaluation": "no",
-        "sensitive_information": "yes",
-        "model_changes": MODEL_CHANGES[0],
+        "ai_role": None,
+        "decision_type": None,
+        "independent_evaluation": None,
+        "sensitive_information": None,
+        "model_changes": None,
     }
 
 
@@ -570,6 +580,161 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Force readable light UI on every client (including OS / browser dark mode).
+# Streamlit theme is locked via .streamlit/config.toml; CSS reinforces BaseWeb + native controls.
+_LIGHT_UI_LOCK_CSS = """
+    <style>
+    :root, html, body {
+        color-scheme: light !important;
+    }
+    html, body, .stApp, [data-testid="stAppViewContainer"] {
+        color-scheme: light !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    .stApp [data-testid="stMarkdownContainer"] p,
+    .stApp [data-testid="stMarkdownContainer"] li,
+    .stApp [data-testid="stMarkdownContainer"] span {
+        color: inherit;
+    }
+    /* Main block container fallback (before view-specific CSS runs) */
+    section.main .block-container {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    /* Text inputs & text areas (including disabled review summary) */
+    [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea,
+    textarea[data-baseweb="textarea"],
+    input[data-baseweb="input"] {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        border-color: #cbd5e1 !important;
+        caret-color: #0f172a !important;
+    }
+    [data-testid="stTextArea"] textarea:disabled,
+    textarea[data-baseweb="textarea"]:disabled {
+        background-color: #f8fafc !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        opacity: 1 !important;
+    }
+    /* Select / combobox */
+    div[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    div[data-testid="stSelectbox"] [data-baseweb="select"] button {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+    /* Select dropdown popover / options */
+    div[data-baseweb="popover"],
+    div[data-baseweb="popover"] ul,
+    ul[role="listbox"] {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    li[role="option"],
+    div[data-baseweb="popover"] li {
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+    }
+    li[role="option"]:hover,
+    div[data-baseweb="popover"] li:hover {
+        background-color: #f1f5f9 !important;
+    }
+    /* Expanders */
+    [data-testid="stExpander"] details {
+        background-color: #ffffff !important;
+        border-color: #dbe4f2 !important;
+        color: #0f172a !important;
+    }
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] summary * {
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+    [data-testid="stExpander"] summary:hover {
+        background-color: #e2e8f0 !important;
+    }
+    [data-testid="stExpander"] [data-testid="stMarkdownContainer"] {
+        color: #0f172a !important;
+    }
+    /* Form submit areas */
+    [data-testid="stForm"] {
+        color: #0f172a !important;
+    }
+    /* Alerts / callouts */
+    div[data-testid="stAlert"] {
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+    }
+    div[data-testid="stAlert"] * {
+        color: inherit !important;
+    }
+    /* Captions & labels */
+    .stCaption, label[data-testid="stWidgetLabel"] {
+        color: #475569 !important;
+    }
+    /* OS dark mode: repeat critical locks (some browsers scope native styling to this media query) */
+    @media (prefers-color-scheme: dark) {
+        :root, html, body {
+            color-scheme: light !important;
+        }
+        html, body, .stApp, [data-testid="stAppViewContainer"] {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        [data-testid="stTextInput"] input,
+        [data-testid="stTextArea"] textarea,
+        textarea[data-baseweb="textarea"],
+        input[data-baseweb="input"] {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+            border-color: #cbd5e1 !important;
+        }
+        [data-testid="stTextArea"] textarea:disabled,
+        textarea[data-baseweb="textarea"]:disabled {
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+            opacity: 1 !important;
+        }
+        div[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+        div[data-testid="stSelectbox"] [data-baseweb="select"] button {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+        }
+        div[data-baseweb="popover"],
+        div[data-baseweb="popover"] ul,
+        ul[role="listbox"] {
+            background-color: #ffffff !important;
+        }
+        li[role="option"] {
+            color: #0f172a !important;
+        }
+        [data-testid="stExpander"] summary,
+        [data-testid="stExpander"] summary * {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+        }
+        [data-testid="stExpander"] details {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+        div[data-testid="stAlert"] {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+    }
+    </style>
+"""
+st.markdown(_LIGHT_UI_LOCK_CSS, unsafe_allow_html=True)
+
 if "view" not in st.session_state:
     st.session_state.view = "landing"
 if "form_data" not in st.session_state:
@@ -588,12 +753,14 @@ if "document_generation_error" not in st.session_state:
     st.session_state.document_generation_error = None
 if "question_defined_terms" not in st.session_state:
     st.session_state.question_defined_terms = set()
+if "_sync_jump_view" not in st.session_state:
+    st.session_state._sync_jump_view = None
 
 view = st.session_state.view
 form_data = st.session_state.form_data
 
 # ---------- Build UI label maps once ----------
-JUR_LABELS, JUR_TO_VAL, JUR_TO_LABEL = label_map(JURISDICTION)
+JUR_LABELS, JUR_TO_VAL, JUR_TO_LABEL = label_map(JURISDICTION, JURISDICTION_OVERRIDES)
 ENTITY_LABELS, ENTITY_TO_VAL, ENTITY_TO_LABEL = label_map(ENTITY, ENTITY_OVERRIDES)
 FUNC_LABELS, FUNC_TO_VAL, FUNC_TO_LABEL = label_map(FUNCTION_CATEGORY, FUNCTION_OVERRIDES)
 CONTENT_LABELS, CONTENT_TO_VAL, CONTENT_TO_LABEL = label_map(CONTENT_TYPE, CONTENT_OVERRIDES)
@@ -606,6 +773,136 @@ DECISION_LABELS, DECISION_TO_VAL, DECISION_TO_LABEL = label_map(DECISION_TYPE)
 IEVAL_LABELS, IEVAL_TO_VAL, IEVAL_TO_LABEL = label_map(INDEPENDENT_EVAL)
 SENSITIVE_LABELS, SENSITIVE_TO_VAL, SENSITIVE_TO_LABEL = label_map(SENSITIVE_INFORMATION, SENSITIVE_OVERRIDES)
 MODEL_LABELS, MODEL_TO_VAL, MODEL_TO_LABEL = label_map(MODEL_CHANGES)
+
+
+def build_survey_select(canonical_values, overrides=None):
+    _, _, to_label = label_map(canonical_values, overrides)
+    ordered_vals = list(canonical_values)
+    labels = [PLACEHOLDER_LABEL] + [to_label[v] for v in ordered_vals] + [NA_UI_LABEL]
+    label_to_value = {PLACEHOLDER_LABEL: None, NA_UI_LABEL: NA_VALUE}
+    for v in ordered_vals:
+        label_to_value[to_label[v]] = v
+    return labels, label_to_value
+
+
+def build_jurisdiction_survey_labels():
+    _, _, jt = label_map(JURISDICTION, JURISDICTION_OVERRIDES)
+    tx_lbl = jt["TX"]
+    labels = [PLACEHOLDER_LABEL, tx_lbl, NA_UI_LABEL]
+    label_to_value = {PLACEHOLDER_LABEL: None, tx_lbl: "TX", NA_UI_LABEL: NA_VALUE}
+    return labels, label_to_value
+
+
+def survey_index_for_form_value(value, labels, label_to_value):
+    if value is None:
+        return 0
+    if value == NA_VALUE:
+        return len(labels) - 1
+    for i, lb in enumerate(labels):
+        if label_to_value.get(lb) == value:
+            return i
+    return 0
+
+
+def _primary_user_singleton(fd):
+    pu = fd.get("primary_user")
+    if isinstance(pu, list):
+        return pu[0] if pu else None
+    return pu
+
+
+def step_is_answered(step_num, fd):
+    pu = _primary_user_singleton(fd)
+    if step_num == 1:
+        return fd.get("jurisdiction") is not None and fd.get("entity") is not None
+    if step_num == 2:
+        return fd.get("function_category") is not None
+    if step_num == 3:
+        return fd.get("content_type") is not None and fd.get("sensitive_information") is not None
+    if step_num == 4:
+        return fd.get("clinical_domain") is not None
+    if step_num == 5:
+        return pu is not None
+    if step_num == 6:
+        return fd.get("human_licensed_review") is not None
+    if step_num == 7:
+        if pu is None:
+            return False
+        if pu != "patient":
+            return True
+        return fd.get("communication_channel") is not None
+    if step_num == 8:
+        return fd.get("ai_role") is not None
+    if step_num == 9:
+        return fd.get("decision_type") is not None
+    if step_num == 10:
+        return fd.get("independent_evaluation") is not None
+    if step_num == 11:
+        return fd.get("model_changes") is not None
+    return False
+
+
+def eleven_step_completion_fraction(fd):
+    return sum(1 for s in range(1, 12) if step_is_answered(s, fd)) / 11.0
+
+
+def nav_glyph_label(step_i, cur, fd):
+    answered = step_is_answered(step_i, fd)
+    dot = "●" if answered else "○"
+    prefix = "► " if step_i == cur else "  "
+    return f"{prefix}{dot} {STEP_KEYWORDS[step_i - 1]}"
+
+
+def render_wizard_progress_bar(fd):
+    pct = int(round(100 * eleven_step_completion_fraction(fd)))
+    st.markdown(
+        "<div style='margin-bottom:0.35rem;'>"
+        "<span style='font-size:0.84rem;color:#475569;font-weight:600;'>Progress</span> "
+        f"<span style='font-size:0.84rem;color:#1d4ed8;font-weight:700;'>{pct}%</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.progress(eleven_step_completion_fraction(fd))
+
+
+def sync_jump_dropdown_to_current_step():
+    cur = get_current_step()
+    jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
+    v = st.session_state.view
+    if st.session_state.get("_sync_jump_view") != v:
+        st.session_state.jump_to_step = jump_options[cur - 1]
+        st.session_state._sync_jump_view = v
+
+
+def summary_field_label(value, to_label_map):
+    if value is None:
+        return "—"
+    if value == NA_VALUE:
+        return NA_UI_LABEL
+    return to_label_map.get(value, pretty_label(str(value)))
+
+
+def render_wizard_sidebar(nav_button_prefix):
+    cur = get_current_step()
+    fd = st.session_state.form_data
+    st.markdown("**ConsentGuard**")
+    st.caption(f"Step {cur}/{TOTAL_STEPS}")
+    jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
+    sync_jump_dropdown_to_current_step()
+    st.selectbox(
+        "Jump to step",
+        options=jump_options,
+        key="jump_to_step",
+        on_change=on_jump_to_step,
+        label_visibility="collapsed",
+    )
+    for i in range(1, TOTAL_STEPS + 1):
+        lbl = nav_glyph_label(i, cur, fd)
+        target = i if i <= 11 else "review"
+        if st.button(lbl, key=f"{nav_button_prefix}_{i}"):
+            st.session_state.view = target
+            st.rerun()
+    st.caption("Click a step to jump")
 
 
 def get_current_step():
@@ -624,6 +921,7 @@ def clear_document_workflow_state():
     st.session_state.document_validation = None
     st.session_state.document_generation_error = None
     st.session_state.question_defined_terms = set()
+    st.session_state._sync_jump_view = None
 
 
 def parse_data_used_text(value):
@@ -636,16 +934,18 @@ def parse_data_used_text(value):
 
 
 def seed_case_fact_inputs_from_context(form_data, result_facts):
+    fc = form_data.get("function_category")
+    ct = form_data.get("content_type")
+    fc_label = pretty_label(fc) if fc not in (None, NA_VALUE) else "workflow"
+    ct_label = pretty_label(ct) if ct not in (None, NA_VALUE) else "information"
     defaults = {
-        "ai_use_purpose": (
-            f"Use AI for {pretty_label(form_data.get('function_category', 'workflow')).lower()}."
-        ),
+        "ai_use_purpose": (f"Use AI for {fc_label.lower()}."),
         "human_review_description": (
             "A licensed clinician reviews AI outputs before they are used in care."
             if form_data.get("human_licensed_review") == "yes"
             else "Describe any human review or operational oversight applied before the AI output is used."
         ),
-        "data_used_text": pretty_label(form_data.get("content_type", "")),
+        "data_used_text": ct_label,
     }
 
     for key, default_value in defaults.items():
@@ -1155,6 +1455,12 @@ def save_and_next(step_num, **updates):
     for k, v in updates.items():
         if k in form_data:
             st.session_state.form_data[k] = v
+    if step_num == 5:
+        pu = st.session_state.form_data.get("primary_user")
+        if isinstance(pu, list):
+            pu = pu[0] if pu else None
+        if pu != "patient":
+            st.session_state.form_data["communication_channel"] = None
     if step_num < 11:
         st.session_state.view = step_num + 1
     else:
@@ -1193,6 +1499,8 @@ if view == "landing":
         )
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Start", type="primary", use_container_width=False):
+            st.session_state.form_data = get_default_form_data()
+            st.session_state._sync_jump_view = None
             st.session_state.view = 1
             st.rerun()
     st.stop()
@@ -1202,26 +1510,11 @@ if view == "landing":
 if view == 1:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_{i}"):
-                st.session_state.view = target
-                st.rerun()
-        st.caption("Click a step to jump")
+        render_wizard_sidebar("nav1")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 1/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Where is the system deployed?")
             legal_md(
@@ -1230,8 +1523,16 @@ if view == 1:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            idx = JUR_LABELS.index(JUR_TO_LABEL.get(form_data.get("jurisdiction", "TX"), JUR_LABELS[0]))
-            sel_jur = st.selectbox("Jurisdiction", JUR_LABELS, index=idx, key="step1_jurisdiction", label_visibility="collapsed")
+            jur_labels, jur_to_val = build_jurisdiction_survey_labels()
+            j_idx = survey_index_for_form_value(form_data.get("jurisdiction"), jur_labels, jur_to_val)
+            sel_jur_lbl = st.selectbox(
+                "Jurisdiction",
+                jur_labels,
+                index=j_idx,
+                key="step1_jurisdiction",
+                label_visibility="collapsed",
+            )
+            sel_jur = jur_to_val[sel_jur_lbl]
             st.markdown("---")
             st.markdown("### What kind of organization is deploying or operating the system?")
             legal_md(
@@ -1240,10 +1541,16 @@ if view == 1:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            ent_val = form_data.get("entity", ENTITY[0])
-            ent_label = ENTITY_TO_LABEL.get(ent_val, ENTITY_LABELS[0])
-            idx_e = ENTITY_LABELS.index(ent_label) if ent_label in ENTITY_LABELS else 0
-            sel_ent = st.selectbox("Entity", ENTITY_LABELS, index=idx_e, key="step1_entity", label_visibility="collapsed")
+            ent_labels, ent_to_val = build_survey_select(ENTITY, ENTITY_OVERRIDES)
+            e_idx = survey_index_for_form_value(form_data.get("entity"), ent_labels, ent_to_val)
+            sel_ent_lbl = st.selectbox(
+                "Entity",
+                ent_labels,
+                index=e_idx,
+                key="step1_entity",
+                label_visibility="collapsed",
+            )
+            sel_ent = ent_to_val[sel_ent_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1251,32 +1558,21 @@ if view == 1:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next1"):
-                    save_and_next(1, jurisdiction=JUR_TO_VAL[sel_jur], entity=ENTITY_TO_VAL[sel_ent])
+                    if sel_jur is None or sel_ent is None:
+                        st.warning("Please select an option or N/A for each question before continuing.")
+                    else:
+                        save_and_next(1, jurisdiction=sel_jur, entity=sel_ent)
     st.stop()
 
 # ---------- Step 2: Function category ----------
 if view == 2:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s2_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav2")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 2/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### What is the AI used for?")
             legal_md(
@@ -1285,13 +1581,13 @@ if view == 2:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("function_category", FUNCTION_CATEGORY[0])
-            label = FUNC_TO_LABEL.get(val, FUNC_LABELS[0])
-            idx = FUNC_LABELS.index(label) if label in FUNC_LABELS else 0
-            sel = st.selectbox("Function", FUNC_LABELS, index=idx, key="step2_func", label_visibility="collapsed")
+            func_labels, func_to_val = build_survey_select(FUNCTION_CATEGORY, FUNCTION_OVERRIDES)
+            f_idx = survey_index_for_form_value(form_data.get("function_category"), func_labels, func_to_val)
+            sel_lbl = st.selectbox("Function", func_labels, index=f_idx, key="step2_func", label_visibility="collapsed")
+            sel_val = func_to_val[sel_lbl]
             render_selected_option_definition(
                 field_key="function_category",
-                selected_value=FUNC_TO_VAL[sel],
+                selected_value=sel_val,
                 to_label_map=FUNC_TO_LABEL,
             )
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1301,32 +1597,21 @@ if view == 2:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next2"):
-                    save_and_next(2, function_category=FUNC_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(2, function_category=sel_val)
     st.stop()
 
 # ---------- Step 3: Content type ----------
 if view == 3:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s3_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav3")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 3/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### What kind of information does the system process or produce?")
             legal_md(
@@ -1335,10 +1620,12 @@ if view == 3:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("content_type", CONTENT_TYPE[0])
-            label = CONTENT_TO_LABEL.get(val, CONTENT_LABELS[0])
-            idx = CONTENT_LABELS.index(label) if label in CONTENT_LABELS else 0
-            sel = st.selectbox("Content", CONTENT_LABELS, index=idx, key="step3_content", label_visibility="collapsed")
+            ct_labels, ct_to_val = build_survey_select(CONTENT_TYPE, CONTENT_OVERRIDES)
+            ct_idx = survey_index_for_form_value(form_data.get("content_type"), ct_labels, ct_to_val)
+            sel_ct_lbl = st.selectbox(
+                "Content", ct_labels, index=ct_idx, key="step3_content", label_visibility="collapsed"
+            )
+            sel_ct = ct_to_val[sel_ct_lbl]
             st.markdown("---")
             st.markdown("### Does the input include sensitive information?")
             legal_md(
@@ -1347,10 +1634,16 @@ if view == 3:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            sensitive_val = form_data.get("sensitive_information", SENSITIVE_INFORMATION[0])
-            sensitive_label = SENSITIVE_TO_LABEL.get(sensitive_val, SENSITIVE_LABELS[0])
-            sensitive_idx = SENSITIVE_LABELS.index(sensitive_label) if sensitive_label in SENSITIVE_LABELS else 0
-            sensitive_sel = st.selectbox("Sensitive information", SENSITIVE_LABELS, index=sensitive_idx, key="step3_sensitive", label_visibility="collapsed")
+            sens_labels, sens_to_val = build_survey_select(SENSITIVE_INFORMATION, SENSITIVE_OVERRIDES)
+            s_idx = survey_index_for_form_value(form_data.get("sensitive_information"), sens_labels, sens_to_val)
+            sel_sens_lbl = st.selectbox(
+                "Sensitive information",
+                sens_labels,
+                index=s_idx,
+                key="step3_sensitive",
+                label_visibility="collapsed",
+            )
+            sel_sens = sens_to_val[sel_sens_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1358,32 +1651,21 @@ if view == 3:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next3"):
-                    save_and_next(3, content_type=CONTENT_TO_VAL[sel], sensitive_information=SENSITIVE_TO_VAL[sensitive_sel])
+                    if sel_ct is None or sel_sens is None:
+                        st.warning("Please select an option or N/A for each question before continuing.")
+                    else:
+                        save_and_next(3, content_type=sel_ct, sensitive_information=sel_sens)
     st.stop()
 
 # ---------- Step 4: Clinical domain ----------
 if view == 4:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s4_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav4")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 4/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Which clinical area is this related to?")
             legal_md(
@@ -1392,10 +1674,12 @@ if view == 4:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("clinical_domain", CLINICAL_DOMAIN[0])
-            label = DOMAIN_TO_LABEL.get(val, DOMAIN_LABELS[0])
-            idx = DOMAIN_LABELS.index(label) if label in DOMAIN_LABELS else 0
-            sel = st.selectbox("Domain", DOMAIN_LABELS, index=idx, key="step4_domain", label_visibility="collapsed")
+            dom_labels, dom_to_val = build_survey_select(CLINICAL_DOMAIN)
+            d_idx = survey_index_for_form_value(form_data.get("clinical_domain"), dom_labels, dom_to_val)
+            sel_lbl = st.selectbox(
+                "Domain", dom_labels, index=d_idx, key="step4_domain", label_visibility="collapsed"
+            )
+            sel_val = dom_to_val[sel_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1403,32 +1687,21 @@ if view == 4:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next4"):
-                    save_and_next(4, clinical_domain=DOMAIN_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(4, clinical_domain=sel_val)
     st.stop()
 
 # ---------- Step 5: Primary user ----------
 if view == 5:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s5_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav5")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 5/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Who directly receives or views the system output?")
             legal_md(
@@ -1437,15 +1710,18 @@ if view == 5:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            default_value = form_data.get("primary_user", "patient")
-            if isinstance(default_value, list):
-                default_value = default_value[0] if default_value else "patient"
-            default_label = USER_TO_LABEL.get(default_value, USER_LABELS[0])
-            idx = USER_LABELS.index(default_label) if default_label in USER_LABELS else 0
-            sel = st.selectbox("Users", USER_LABELS, index=idx, key="step5_user", label_visibility="collapsed")
+            pu_default = form_data.get("primary_user")
+            if isinstance(pu_default, list):
+                pu_default = pu_default[0] if pu_default else None
+            user_labels, user_to_val = build_survey_select(PRIMARY_USER)
+            u_idx = survey_index_for_form_value(pu_default, user_labels, user_to_val)
+            sel_lbl = st.selectbox(
+                "Users", user_labels, index=u_idx, key="step5_user", label_visibility="collapsed"
+            )
+            sel_val = user_to_val[sel_lbl]
             render_selected_option_definition(
                 field_key="primary_user",
-                selected_value=USER_TO_VAL[sel],
+                selected_value=sel_val,
                 to_label_map=USER_TO_LABEL,
             )
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1455,32 +1731,21 @@ if view == 5:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next5"):
-                    save_and_next(5, primary_user=USER_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(5, primary_user=sel_val)
     st.stop()
 
 # ---------- Step 6: Human licensed review ----------
 if view == 6:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s6_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav6")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 6/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Does a licensed clinician review AI outputs before they affect care?")
             legal_md(
@@ -1489,10 +1754,12 @@ if view == 6:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("human_licensed_review", "no")
-            label = REVIEW_TO_LABEL.get(val, REVIEW_LABELS[0])
-            idx = REVIEW_LABELS.index(label) if label in REVIEW_LABELS else 0
-            sel = st.selectbox("Review", REVIEW_LABELS, index=idx, key="step6_review", label_visibility="collapsed")
+            rev_labels, rev_to_val = build_survey_select(HUMAN_LICENSED_REVIEW, HUMAN_REVIEW_OVERRIDES)
+            r_idx = survey_index_for_form_value(form_data.get("human_licensed_review"), rev_labels, rev_to_val)
+            sel_lbl = st.selectbox(
+                "Review", rev_labels, index=r_idx, key="step6_review", label_visibility="collapsed"
+            )
+            sel_val = rev_to_val[sel_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1500,37 +1767,39 @@ if view == 6:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next6"):
-                    save_and_next(6, human_licensed_review=REVIEW_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(6, human_licensed_review=sel_val)
     st.stop()
 
 # ---------- Step 7: Communication channel (conditional + override) ----------
 if view == 7:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s7_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav7")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 7/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### How does the patient interact with the system output?")
             primary_user = form_data.get("primary_user")
             if isinstance(primary_user, list):
                 primary_user = primary_user[0] if primary_user else None
+            if primary_user is None:
+                st.warning(
+                    "Answer Users (step 5) before completing this step. Use the sidebar or jump menu to go back."
+                )
+                st.markdown("<br>", unsafe_allow_html=True)
+                b1, b2 = st.columns(2)
+                with b1:
+                    if st.button("← Back", key="back7_need_user"):
+                        go_back()
+                with b2:
+                    st.button("Next →", type="primary", key="next7_blocked", disabled=True)
+                st.stop()
+
             show_channel = primary_user == "patient"
 
             if not show_channel:
@@ -1551,13 +1820,14 @@ if view == 7:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("communication_channel")
-            if val is not None:
-                label = CHANNEL_TO_LABEL.get(val, CHANNEL_LABELS[0])
-                idx = CHANNEL_LABELS.index(label) if label in CHANNEL_LABELS else 0
-            else:
-                idx = 0
-            sel = st.selectbox("Channel", CHANNEL_LABELS, index=idx, key="step7_channel", label_visibility="collapsed")
+            ch_labels, ch_to_val = build_survey_select(COMMUNICATION_CHANNEL)
+            ch_idx = survey_index_for_form_value(
+                form_data.get("communication_channel"), ch_labels, ch_to_val
+            )
+            sel_lbl = st.selectbox(
+                "Channel", ch_labels, index=ch_idx, key="step7_channel", label_visibility="collapsed"
+            )
+            sel_val = ch_to_val[sel_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1565,32 +1835,21 @@ if view == 7:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next7b"):
-                    save_and_next(7, communication_channel=CHANNEL_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(7, communication_channel=sel_val)
     st.stop()
 
 # ---------- Step 8: AI role ----------
 if view == 8:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s8_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav8")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 8/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### How much does the AI influence the outcome?")
             legal_md(
@@ -1599,10 +1858,12 @@ if view == 8:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("ai_role", "assistive")
-            label = AIROLE_TO_LABEL.get(val, AIROLE_LABELS[0])
-            idx = AIROLE_LABELS.index(label) if label in AIROLE_LABELS else 0
-            sel = st.selectbox("AI role", AIROLE_LABELS, index=idx, key="step8_airole", label_visibility="collapsed")
+            ar_labels, ar_to_val = build_survey_select(AI_ROLE, AI_ROLE_OVERRIDES)
+            ar_idx = survey_index_for_form_value(form_data.get("ai_role"), ar_labels, ar_to_val)
+            sel_lbl = st.selectbox(
+                "AI role", ar_labels, index=ar_idx, key="step8_airole", label_visibility="collapsed"
+            )
+            sel_val = ar_to_val[sel_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1610,32 +1871,21 @@ if view == 8:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next8"):
-                    save_and_next(8, ai_role=AIROLE_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(8, ai_role=sel_val)
     st.stop()
 
 # ---------- Step 9: Decision type ----------
 if view == 9:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s9_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav9")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 9/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### What type of decision does the system support?")
             legal_md(
@@ -1644,13 +1894,19 @@ if view == 9:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("decision_type", "administrative")
-            label = DECISION_TO_LABEL.get(val, DECISION_LABELS[0])
-            idx = DECISION_LABELS.index(label) if label in DECISION_LABELS else 0
-            sel = st.selectbox("Decision", DECISION_LABELS, index=idx, key="step9_decision", label_visibility="collapsed")
+            dec_labels, dec_to_val = build_survey_select(DECISION_TYPE)
+            d_idx = survey_index_for_form_value(form_data.get("decision_type"), dec_labels, dec_to_val)
+            sel_lbl = st.selectbox(
+                "Decision",
+                dec_labels,
+                index=d_idx,
+                key="step9_decision",
+                label_visibility="collapsed",
+            )
+            sel_val = dec_to_val[sel_lbl]
             render_selected_option_definition(
                 field_key="decision_type",
-                selected_value=DECISION_TO_VAL[sel],
+                selected_value=sel_val,
                 to_label_map=DECISION_TO_LABEL,
             )
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1660,32 +1916,21 @@ if view == 9:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next9"):
-                    save_and_next(9, decision_type=DECISION_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(9, decision_type=sel_val)
     st.stop()
 
 # ---------- Step 10: Independent evaluation ----------
 if view == 10:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s10_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav10")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 10/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Has the system been independently tested or validated?")
             legal_md(
@@ -1694,10 +1939,14 @@ if view == 10:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("independent_evaluation", "no")
-            label = IEVAL_TO_LABEL.get(val, IEVAL_LABELS[0])
-            idx = IEVAL_LABELS.index(label) if label in IEVAL_LABELS else 0
-            sel = st.selectbox("Evaluation", IEVAL_LABELS, index=idx, key="step10_ieval", label_visibility="collapsed")
+            ie_labels, ie_to_val = build_survey_select(INDEPENDENT_EVAL)
+            ie_idx = survey_index_for_form_value(
+                form_data.get("independent_evaluation"), ie_labels, ie_to_val
+            )
+            sel_lbl = st.selectbox(
+                "Evaluation", ie_labels, index=ie_idx, key="step10_ieval", label_visibility="collapsed"
+            )
+            sel_val = ie_to_val[sel_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1705,32 +1954,21 @@ if view == 10:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next10"):
-                    save_and_next(10, independent_evaluation=IEVAL_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(10, independent_evaluation=sel_val)
     st.stop()
 
 # ---------- Step 11: Model changes ----------
 if view == 11:
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_s11_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav11")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 11/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### How does the model change over time?")
             legal_md(
@@ -1739,10 +1977,12 @@ if view == 11:
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            val = form_data.get("model_changes", MODEL_CHANGES[0])
-            label = MODEL_TO_LABEL.get(val, MODEL_LABELS[0])
-            idx = MODEL_LABELS.index(label) if label in MODEL_LABELS else 0
-            sel = st.selectbox("Model", MODEL_LABELS, index=idx, key="step11_model", label_visibility="collapsed")
+            mc_labels, mc_to_val = build_survey_select(MODEL_CHANGES)
+            mc_idx = survey_index_for_form_value(form_data.get("model_changes"), mc_labels, mc_to_val)
+            sel_lbl = st.selectbox(
+                "Model", mc_labels, index=mc_idx, key="step11_model", label_visibility="collapsed"
+            )
+            sel_val = mc_to_val[sel_lbl]
             st.markdown("<br>", unsafe_allow_html=True)
             b1, b2 = st.columns(2)
             with b1:
@@ -1750,32 +1990,21 @@ if view == 11:
                     go_back()
             with b2:
                 if st.button("Next →", type="primary", key="next11"):
-                    save_and_next(11, model_changes=MODEL_TO_VAL[sel])
+                    if sel_val is None:
+                        st.warning("Please select an option or N/A before continuing.")
+                    else:
+                        save_and_next(11, model_changes=sel_val)
     st.stop()
 
 # ---------- Step 12: Review ----------
 if view == "review":
     side_col, main_col = st.columns([1, 4])
     with side_col:
-        st.markdown("**ConsentGuard**")
-        st.caption(f"Step {get_current_step()}/{TOTAL_STEPS}")
-        cur = get_current_step()
-        jump_options = [f"{i}. {STEP_KEYWORDS[i - 1]}" for i in range(1, TOTAL_STEPS + 1)]
-        st.selectbox("Jump to step", options=jump_options, index=cur - 1, key="jump_to_step", on_change=on_jump_to_step, label_visibility="collapsed")
-        for i in range(1, TOTAL_STEPS + 1):
-            if i < cur:
-                lbl = "● " + STEP_KEYWORDS[i - 1]
-            elif i == cur:
-                lbl = "► " + STEP_KEYWORDS[i - 1]
-            else:
-                lbl = "○ " + STEP_KEYWORDS[i - 1]
-            target = i if i <= 11 else "review"
-            if st.button(lbl, key=f"nav_review_{i}"):
-                st.session_state.view = target
-                st.rerun()
+        render_wizard_sidebar("nav_review")
     with main_col:
         _, center, _ = st.columns([1, 2, 1])
         with center:
+            render_wizard_progress_bar(st.session_state.form_data)
             st.markdown(f"<p class='step-indicator'>STEP 12/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Review your choices")
             legal_md(
@@ -1784,22 +2013,26 @@ if view == "review":
                 track_question_terms=True,
             )
             st.markdown("<br>", unsafe_allow_html=True)
-            entity_label = ENTITY_TO_LABEL.get(form_data.get("entity"), "")
-            func_label = FUNC_TO_LABEL.get(form_data.get("function_category"), "")
-            domain_label = DOMAIN_TO_LABEL.get(form_data.get("clinical_domain"), "")
-            decision_label = DECISION_TO_LABEL.get(form_data.get("decision_type"), "")
-            airole_label = AIROLE_TO_LABEL.get(form_data.get("ai_role"), "")
-            primary_user = form_data.get("primary_user")
+            fd = st.session_state.form_data
+            jur_label = summary_field_label(fd.get("jurisdiction"), JUR_TO_LABEL)
+            entity_label = summary_field_label(fd.get("entity"), ENTITY_TO_LABEL)
+            func_label = summary_field_label(fd.get("function_category"), FUNC_TO_LABEL)
+            domain_label = summary_field_label(fd.get("clinical_domain"), DOMAIN_TO_LABEL)
+            decision_label = summary_field_label(fd.get("decision_type"), DECISION_TO_LABEL)
+            airole_label = summary_field_label(fd.get("ai_role"), AIROLE_TO_LABEL)
+            primary_user = fd.get("primary_user")
             if isinstance(primary_user, list):
                 primary_user = primary_user[0] if primary_user else None
-            content_type = form_data.get("content_type", "")
-            sensitive_information = form_data.get("sensitive_information", "no")
+            pu_label = summary_field_label(primary_user, USER_TO_LABEL)
+            content_type = fd.get("content_type")
+            sensitive_information = fd.get("sensitive_information")
+            ct_label = summary_field_label(content_type, CONTENT_TO_LABEL)
+            sens_label = summary_field_label(sensitive_information, SENSITIVE_TO_LABEL)
             summary = (
-                f"{entity_label} | {func_label} | {domain_label} | "
-                f"{decision_label} | {airole_label} | "
-                f"Patient-facing: {'Yes' if primary_user == 'patient' else 'No'} | "
-                f"Clinical data: {'Yes' if content_type == 'patient_clinical_information' else 'No'} | "
-                f"Sensitive info: {pretty_label(sensitive_information)}"
+                f"Jurisdiction: {jur_label} | Entity: {entity_label} | Function: {func_label} | "
+                f"Domain: {domain_label} | Primary user: {pu_label} | "
+                f"Decision: {decision_label} | AI role: {airole_label} | "
+                f"Content: {ct_label} | Sensitive: {sens_label}"
             )
             st.text_area("Summary", value=summary, height=80, disabled=True, key="review_summary", label_visibility="collapsed")
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1809,30 +2042,35 @@ if view == "review":
                     go_back()
             with b2:
                 if st.button("Submit →", type="primary", key="submit"):
-                    clear_document_workflow_state()
-                    user_input = {
-                        "jurisdiction": form_data.get("jurisdiction"),
-                        "entity": form_data.get("entity"),
-                        "function_category": form_data.get("function_category"),
-                        "content_type": form_data.get("content_type"),
-                        "clinical_domain": form_data.get("clinical_domain"),
-                        "primary_user": form_data.get("primary_user"),
-                        "human_licensed_review": form_data.get("human_licensed_review"),
-                        "communication_channel": form_data.get("communication_channel"),
-                        "ai_role": form_data.get("ai_role"),
-                        "decision_type": form_data.get("decision_type"),
-                        "independent_evaluation": form_data.get("independent_evaluation"),
-                        "sensitive_information": form_data.get("sensitive_information"),
-                        "model_changes": form_data.get("model_changes"),
-                    }
-                    laws_dir, enforcement_dir = get_law_paths(user_input["jurisdiction"])
-                    st.session_state.result = evaluate(
-                        user_input=user_input,
-                        laws_dir=laws_dir,
-                        enforcement_dir=enforcement_dir,
-                    )
-                    st.session_state.view = "results"
-                    st.rerun()
+                    incomplete = [i for i in range(1, 12) if not step_is_answered(i, fd)]
+                    if incomplete:
+                        miss = ", ".join(f"{i}. {STEP_KEYWORDS[i - 1]}" for i in incomplete)
+                        st.error(f"Complete all steps before submitting. Incomplete: {miss}")
+                    else:
+                        clear_document_workflow_state()
+                        user_input = {
+                            "jurisdiction": form_data.get("jurisdiction"),
+                            "entity": form_data.get("entity"),
+                            "function_category": form_data.get("function_category"),
+                            "content_type": form_data.get("content_type"),
+                            "clinical_domain": form_data.get("clinical_domain"),
+                            "primary_user": form_data.get("primary_user"),
+                            "human_licensed_review": form_data.get("human_licensed_review"),
+                            "communication_channel": form_data.get("communication_channel"),
+                            "ai_role": form_data.get("ai_role"),
+                            "decision_type": form_data.get("decision_type"),
+                            "independent_evaluation": form_data.get("independent_evaluation"),
+                            "sensitive_information": form_data.get("sensitive_information"),
+                            "model_changes": form_data.get("model_changes"),
+                        }
+                        laws_dir, enforcement_dir = get_law_paths(user_input["jurisdiction"])
+                        st.session_state.result = evaluate(
+                            user_input=user_input,
+                            laws_dir=laws_dir,
+                            enforcement_dir=enforcement_dir,
+                        )
+                        st.session_state.view = "results"
+                        st.rerun()
     st.stop()
 
 # ---------- Results view ----------

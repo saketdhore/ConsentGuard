@@ -16,12 +16,14 @@ class JurisdictionEnum(StrEnum):
     TX = "TX"
     CO = "CO"
     UT = "UT"
+    NOT_APPLICABLE = "n_a"
 
 
 class EntityEnum(StrEnum):
     LICENSED = "licensed"
     UNLICENSED = "unlicensed"
     NOT_SURE = "not_sure"
+    NOT_APPLICABLE = "n_a"
 
 
 class PrimaryUserEnum(StrEnum):
@@ -31,6 +33,7 @@ class PrimaryUserEnum(StrEnum):
     ADMINISTRATOR = "administrator"
     RESEARCHER = "researcher"
     INTERNAL_TEAM = "internal_team"
+    NOT_APPLICABLE = "n_a"
 
 
 class ClinicalDomainEnum(StrEnum):
@@ -39,17 +42,20 @@ class ClinicalDomainEnum(StrEnum):
     EMERGENCY_CARE = "emergency_care"
     WELLNESS_CARE_COORDINATION = "wellness_care_coordination"
     SPECIALTY_CARE = "specialty_care"
+    NOT_APPLICABLE = "n_a"
 
 
 class AIRoleEnum(StrEnum):
     ASSISTIVE = "assistive"
     SUBSTANTIAL_FACTOR = "substantial_factor"
     AUTONOMOUS = "autonomous"
+    NOT_APPLICABLE = "n_a"
 
 
 class IndependentEvaluationEnum(StrEnum):
     YES = "yes"
     NO = "no"
+    NOT_APPLICABLE = "n_a"
 
 
 class FunctionCategoryEnum(StrEnum):
@@ -62,17 +68,20 @@ class FunctionCategoryEnum(StrEnum):
     REMOTE_PATIENT_MONITORING = "remote_patient_monitoring"
     ADMINISTRATIVE_ONLY = "administrative_only"
     RESEARCH_ONLY = "research_only"
+    NOT_APPLICABLE = "n_a"
 
 
 class ContentTypeEnum(StrEnum):
     PATIENT_CLINICAL_INFORMATION = "patient_clinical_information"
     NON_CLINICAL_HEALTH_INFORMATION = "non_clinical_health_information"
     ADMINISTRATIVE_ONLY = "administrative_only"
+    NOT_APPLICABLE = "n_a"
 
 
 class HumanLicensedReviewEnum(StrEnum):
     YES = "yes"
     NO = "no"
+    NOT_APPLICABLE = "n_a"
 
 
 class CommunicationChannelEnum(StrEnum):
@@ -82,6 +91,7 @@ class CommunicationChannelEnum(StrEnum):
     AUDIO = "audio"
     VIDEO = "video"
     IN_PERSON_SUPPORT = "in_person_support"
+    NOT_APPLICABLE = "n_a"
 
 
 class DecisionTypeEnum(StrEnum):
@@ -91,17 +101,20 @@ class DecisionTypeEnum(StrEnum):
     MONITORING_ALERT = "monitoring_alert"
     DOCUMENTATION = "documentation"
     ADMINISTRATIVE = "administrative"
+    NOT_APPLICABLE = "n_a"
 
 
 class SensitiveInformationEnum(StrEnum):
     YES = "yes"
     NO = "no"
+    NOT_APPLICABLE = "n_a"
 
 
 class ModelChangesEnum(StrEnum):
     STATIC = "static"
     PERIODIC_UPDATES = "periodic_updates"
     CONTINUOUS_LEARNING = "continuous_learning"
+    NOT_APPLICABLE = "n_a"
 
 
 class ConsentDocumentTypeEnum(StrEnum):

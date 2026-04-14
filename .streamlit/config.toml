@@ -1,0 +1,9 @@
+# Light-only theme: applied on every machine/server when this repo is the CWD
+# (Streamlit reads ./.streamlit/config.toml at startup).
+# Deployments must include the .streamlit directory in the app root.
+[theme]
+base = "light"
+primaryColor = "#1d4ed8"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f1f5f9"
+textColor = "#0f172a"
