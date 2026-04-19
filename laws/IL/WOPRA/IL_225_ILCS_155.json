@@ -1,0 +1,211 @@
+{
+  "law_id": "IL_225_ILCS_155",
+  "jurisdiction": "IL",
+  "citation": "225 ILCS 155",
+  "act": "Wellness and Oversight for Psychological Resources Act",
+  "effective_date": "upon_becoming_law",
+  "status": "active",
+  "law_type": "therapy_service_ai_compliance",
+
+  "triggers": {
+    "il_225_155_unlicensed_public_therapy": {
+      "description": "Illinois prohibits non-licensed-professional therapy or psychotherapy services offered to the public",
+      "all_of": [
+        { "field": "is_il", "op": "==", "value": true },
+        { "field": "illinois_wopra_applies", "op": "==", "value": true },
+        { "field": "is_offered_to_public", "op": "==", "value": true },
+        { "field": "provider_is_unlicensed", "op": "==", "value": true }
+      ]
+    },
+    "il_225_155_recorded_supplementary_support": {
+      "description": "A licensed professional uses AI for supplementary support while the therapy session is recorded or transcribed",
+      "all_of": [
+        { "field": "is_il", "op": "==", "value": true },
+        { "field": "illinois_wopra_applies", "op": "==", "value": true },
+        { "field": "provider_is_licensed_professional", "op": "==", "value": true },
+        { "field": "is_artificial_intelligence_system", "op": "==", "value": true },
+        { "field": "uses_ai_for_supplementary_support", "op": "==", "value": true },
+        { "field": "session_recorded_or_transcribed", "op": "==", "value": true }
+      ]
+    },
+    "il_225_155_independent_therapeutic_decisions": {
+      "description": "A licensed professional allows AI to make independent therapeutic decisions",
+      "all_of": [
+        { "field": "is_il", "op": "==", "value": true },
+        { "field": "illinois_wopra_applies", "op": "==", "value": true },
+        { "field": "provider_is_licensed_professional", "op": "==", "value": true },
+        { "field": "is_artificial_intelligence_system", "op": "==", "value": true },
+        { "field": "ai_makes_independent_therapeutic_decisions", "op": "==", "value": true }
+      ]
+    },
+    "il_225_155_therapeutic_communication": {
+      "description": "A licensed professional allows AI to directly interact with clients in therapeutic communication",
+      "all_of": [
+        { "field": "is_il", "op": "==", "value": true },
+        { "field": "illinois_wopra_applies", "op": "==", "value": true },
+        { "field": "provider_is_licensed_professional", "op": "==", "value": true },
+        { "field": "is_artificial_intelligence_system", "op": "==", "value": true },
+        { "field": "ai_performs_therapeutic_communication", "op": "==", "value": true }
+      ]
+    },
+    "il_225_155_unreviewed_recommendations": {
+      "description": "A licensed professional allows AI to generate therapeutic recommendations or treatment plans without licensed review and approval",
+      "all_of": [
+        { "field": "is_il", "op": "==", "value": true },
+        { "field": "illinois_wopra_applies", "op": "==", "value": true },
+        { "field": "provider_is_licensed_professional", "op": "==", "value": true },
+        { "field": "is_artificial_intelligence_system", "op": "==", "value": true },
+        { "field": "ai_generates_therapeutic_recommendations", "op": "==", "value": true },
+        { "field": "licensed_review_present", "op": "==", "value": false }
+      ]
+    },
+    "il_225_155_emotion_detection": {
+      "description": "A licensed professional allows AI to detect emotions or mental states",
+      "all_of": [
+        { "field": "is_il", "op": "==", "value": true },
+        { "field": "illinois_wopra_applies", "op": "==", "value": true },
+        { "field": "provider_is_licensed_professional", "op": "==", "value": true },
+        { "field": "is_artificial_intelligence_system", "op": "==", "value": true },
+        { "field": "ai_detects_emotions_or_mental_states", "op": "==", "value": true }
+      ]
+    },
+    "il_225_155_confidentiality": {
+      "description": "Records kept by a licensed professional and therapy-related communications exist",
+      "all_of": [
+        { "field": "is_il", "op": "==", "value": true },
+        { "field": "illinois_wopra_applies", "op": "==", "value": true },
+        { "field": "provider_is_licensed_professional", "op": "==", "value": true },
+        { "field": "records_or_therapy_communications_exist", "op": "==", "value": true }
+      ]
+    }
+  },
+
+  "obligations": [
+    {
+      "obligation_id": "SUPPLEMENTARY_SUPPORT_WRITTEN_DISCLOSURE",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "format_requirement",
+      "required": true,
+      "requirements": ["written"],
+      "content": "Provide the Section 15 disclosure in writing.",
+      "citation": "225 ILCS 155/15(b)(1)"
+    },
+    {
+      "obligation_id": "DISCLOSE_AI_USE",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "disclosure",
+      "required": true,
+      "content": "Inform the patient or the patient's legally authorized representative in writing that artificial intelligence will be used.",
+      "citation": "225 ILCS 155/15(b)(1)(A)"
+    },
+    {
+      "obligation_id": "DISCLOSE_SPECIFIC_AI_PURPOSE",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "disclosure",
+      "required": true,
+      "content": "Inform the patient or the patient's legally authorized representative in writing of the specific purpose of the artificial intelligence tool or system that will be used.",
+      "citation": "225 ILCS 155/15(b)(1)(B)"
+    },
+    {
+      "obligation_id": "PATIENT_OR_REPRESENTATIVE_RECIPIENT",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "recipient_requirement",
+      "required": true,
+      "content": "Provide the written disclosure to the patient or the patient's legally authorized representative and obtain consent from that person.",
+      "citation": "225 ILCS 155/15(b)(1)-(2)"
+    },
+    {
+      "obligation_id": "EXPLICIT_WRITTEN_CONSENT_REQUIRED",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "consent_requirement",
+      "required": true,
+      "content": "Obtain clear, explicit, informed, voluntary, specific, written consent, including consent provided by electronic means, before using artificial intelligence for recorded or transcribed supplementary support.",
+      "citation": "225 ILCS 155/10; 225 ILCS 155/15(b)(2)"
+    },
+    {
+      "obligation_id": "CONSENT_MUST_BE_REVOCABLE",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "consent_limitation",
+      "required": true,
+      "content": "Consent for this use of artificial intelligence must remain revocable by the individual.",
+      "citation": "225 ILCS 155/10"
+    },
+    {
+      "obligation_id": "TERMS_OF_USE_NOT_VALID_CONSENT",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "consent_limitation",
+      "required": true,
+      "content": "Do not rely on general or broad terms of use as the required consent.",
+      "citation": "225 ILCS 155/10(1)"
+    },
+    {
+      "obligation_id": "PASSIVE_INTERACTION_NOT_VALID_CONSENT",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "consent_limitation",
+      "required": true,
+      "content": "Hovering, muting, pausing, or closing digital content is not valid consent.",
+      "citation": "225 ILCS 155/10(2)"
+    },
+    {
+      "obligation_id": "DECEPTIVE_ACTIONS_INVALIDATE_CONSENT",
+      "applies_when": ["il_225_155_recorded_supplementary_support"],
+      "type": "consent_limitation",
+      "required": true,
+      "content": "Consent obtained through deceptive actions is invalid.",
+      "citation": "225 ILCS 155/10(3)"
+    },
+    {
+      "obligation_id": "THERAPY_RECORDS_AND_COMMUNICATIONS_CONFIDENTIAL",
+      "applies_when": ["il_225_155_confidentiality"],
+      "type": "legal_compliance_requirement",
+      "required": true,
+      "content": "Treat records kept by the licensed professional and communications with an individual seeking therapy or psychotherapy services as confidential, and do not disclose them except as required under the Mental Health and Developmental Disabilities Confidentiality Act.",
+      "citation": "225 ILCS 155/25"
+    }
+  ],
+
+  "prohibitions": [
+    {
+      "prohibition_id": "NO_UNLICENSED_PUBLIC_THERAPY",
+      "applies_when": ["il_225_155_unlicensed_public_therapy"],
+      "required": true,
+      "text": "Unlicensed individuals, corporations, entities, and unregulated artificial intelligence systems cannot provide, advertise, or otherwise offer therapy or psychotherapy services to the public in Illinois.",
+      "citation": "225 ILCS 155/20(a)"
+    },
+    {
+      "prohibition_id": "NO_INDEPENDENT_THERAPEUTIC_DECISIONS",
+      "applies_when": ["il_225_155_independent_therapeutic_decisions"],
+      "required": true,
+      "text": "A licensed professional may not allow artificial intelligence to make independent therapeutic decisions.",
+      "citation": "225 ILCS 155/20(b)(1)"
+    },
+    {
+      "prohibition_id": "NO_AI_THERAPEUTIC_COMMUNICATION",
+      "applies_when": ["il_225_155_therapeutic_communication"],
+      "required": true,
+      "text": "A licensed professional may not allow artificial intelligence to directly interact with clients in any form of therapeutic communication.",
+      "citation": "225 ILCS 155/20(b)(2)"
+    },
+    {
+      "prohibition_id": "NO_UNREVIEWED_THERAPEUTIC_RECOMMENDATIONS",
+      "applies_when": ["il_225_155_unreviewed_recommendations"],
+      "required": true,
+      "text": "A licensed professional may not allow artificial intelligence to generate therapeutic recommendations or treatment plans without review and approval by the licensed professional.",
+      "citation": "225 ILCS 155/20(b)(3)"
+    },
+    {
+      "prohibition_id": "NO_EMOTION_OR_MENTAL_STATE_DETECTION",
+      "applies_when": ["il_225_155_emotion_detection"],
+      "required": true,
+      "text": "A licensed professional may not allow artificial intelligence to detect emotions or mental states.",
+      "citation": "225 ILCS 155/20(b)(4)"
+    }
+  ],
+
+  "enforcement_ref": ["IL_225_ILCS_155_ENFORCEMENT"],
+
+  "notes": [
+    "The Act is gated on therapy or psychotherapy services and does not trigger from mental-health domain tagging alone.",
+    "Exempt religious counseling, peer support, and public self-help or educational material block the Act entirely."
+  ]
+}

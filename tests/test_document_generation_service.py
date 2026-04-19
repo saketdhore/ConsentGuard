@@ -17,7 +17,10 @@ from engine.services import (
     DocumentGenerationError,
     generate_document_from_brief,
 )
-from engine.services.document_generation_service import _generated_document_json_schema
+from engine.services.document_generation_service import (
+    _generated_document_json_schema,
+    build_document_generation_input,
+)
 
 
 def make_brief(
@@ -100,7 +103,13 @@ class DocumentGenerationServiceTests(unittest.TestCase):
         brief = make_brief(
             document_type=ConsentDocumentTypeEnum.DISCLOSURE_AND_CONSENT,
             required_sections=[
+                DocumentSectionIdEnum.PATIENT_INFORMATION,
+                DocumentSectionIdEnum.INTRODUCTION,
                 DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+                DocumentSectionIdEnum.HOW_AI_WAS_USED,
+                DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+                DocumentSectionIdEnum.BENEFITS_AND_RISKS,
+                DocumentSectionIdEnum.PATIENT_RIGHTS,
                 DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
                 DocumentSectionIdEnum.SIGNATURE_BLOCK,
             ],
@@ -108,26 +117,88 @@ class DocumentGenerationServiceTests(unittest.TestCase):
         case_facts = CaseFactsSchema(
             jurisdiction="TX",
             primary_user="patient",
+            patient_name="Jane Doe",
+            date_of_birth="1990-01-01",
+            document_date="2026-04-19",
+            practice_name="North Clinic",
+            provider_name="Dr. Rivera",
+            ai_system_name="CareSignal GPT",
             ai_use_purpose="Use AI to support a patient messaging workflow.",
             ai_case_use_description="The AI drafts the disclosure language for provider review.",
+            human_review_description="A licensed clinician reviews every AI-generated recommendation before it affects care.",
+            opt_out_alternative_description="If you decline AI-supported care, we can discuss a standard clinician-led workflow.",
+            model_training_use_description="No patient data from this workflow will be used to train or fine-tune a model without additional express consent.",
+            data_used=["patient messages", "care-plan history"],
         )
         provider = Mock()
         provider.generate_structured_json.return_value = {
             "document_type": "disclosure_and_consent",
             "audience": "patient",
             "jurisdiction": "TX",
-            "title": "Patient AI Disclosure and Consent",
+            "title": "Patient Consent Form",
             "sections": [
                 {
-                    "section_id": "ai_use_disclosure",
+                    "section_id": "patient_information",
                     "order": 1,
+                    "heading": "Patient Information",
+                    "body": "Patient Name: Jane Doe\nDate of Birth: 1990-01-01\nProvider Name: Dr. Rivera\nPractice Name: North Clinic",
+                    "bullets": [],
+                    "source_requirement_ids": ["req-1"],
+                },
+                {
+                    "section_id": "introduction",
+                    "order": 2,
+                    "heading": "1. Introduction to AI Use in Your Care",
+                    "body": "North Clinic uses CareSignal GPT as part of your care workflow.",
+                    "bullets": [],
+                    "source_requirement_ids": ["req-1"],
+                },
+                {
+                    "section_id": "ai_use_disclosure",
+                    "order": 3,
+                    "heading": "2. AI Use Disclosure",
                     "body": "We use AI to support this patient-facing workflow.",
+                    "bullets": [],
+                    "source_requirement_ids": ["req-1"],
+                },
+                {
+                    "section_id": "how_ai_was_used",
+                    "order": 4,
+                    "heading": "3. How the AI System Works",
+                    "body": "Data Processed: patient messages, care-plan history.",
+                    "bullets": [],
+                    "source_requirement_ids": ["req-1"],
+                },
+                {
+                    "section_id": "human_review_statement",
+                    "order": 5,
+                    "heading": "4. Human Review Statement",
+                    "body": "A licensed clinician reviews every AI-generated recommendation before it affects care.",
+                    "bullets": [],
+                    "source_requirement_ids": ["req-1"],
+                },
+                {
+                    "section_id": "benefits_and_risks",
+                    "order": 6,
+                    "heading": "5. Benefits and Risks",
+                    "body": "Benefits and risks are summarized below.",
+                    "bullets": ["Benefit: faster follow-up", "Risk: inaccurate suggestions"],
+                    "source_requirement_ids": ["req-1"],
+                },
+                {
+                    "section_id": "patient_rights",
+                    "order": 7,
+                    "heading": "6. Your Rights",
+                    "body": "You may opt out at any time and ask questions about AI use in your care.",
+                    "bullets": [],
                     "source_requirement_ids": ["req-1"],
                 },
                 {
                     "section_id": "consent_or_acknowledgment",
-                    "order": 2,
+                    "order": 8,
+                    "heading": "Consent",
                     "body": "I consent to this AI-assisted step before it occurs.",
+                    "bullets": [],
                     "source_requirement_ids": ["req-1"],
                 },
             ],
@@ -149,13 +220,72 @@ class DocumentGenerationServiceTests(unittest.TestCase):
             provider=provider,
         )
 
-        self.assertEqual(document.title, "Patient AI Disclosure and Consent")
-        self.assertEqual(len(document.sections), 2)
+        self.assertEqual(document.title, "Patient Consent Form")
+        self.assertEqual(len(document.sections), 8)
         provider.generate_structured_json.assert_called_once()
         call_kwargs = provider.generate_structured_json.call_args.kwargs
         self.assertEqual(call_kwargs["schema_name"], "generated_document")
         self.assertIn("Base consent template text.", call_kwargs["input_text"])
-        self.assertIn("patient-facing workflow", call_kwargs["input_text"])
+        self.assertIn("patient_consent_form_v1", call_kwargs["input_text"])
+        self.assertIn("1. Introduction to AI Use in Your Care", call_kwargs["input_text"])
+
+    def test_patient_consent_brief_includes_canonical_template_payload(self) -> None:
+        brief = make_brief(
+            document_type=ConsentDocumentTypeEnum.DISCLOSURE_AND_CONSENT,
+            required_sections=[
+                DocumentSectionIdEnum.PATIENT_INFORMATION,
+                DocumentSectionIdEnum.INTRODUCTION,
+                DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+                DocumentSectionIdEnum.HOW_AI_WAS_USED,
+                DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+                DocumentSectionIdEnum.BENEFITS_AND_RISKS,
+                DocumentSectionIdEnum.PATIENT_RIGHTS,
+                DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+                DocumentSectionIdEnum.SIGNATURE_BLOCK,
+            ],
+        )
+        case_facts = CaseFactsSchema(
+            jurisdiction="TX",
+            primary_user="patient",
+            patient_name="Jane Doe",
+            practice_name="North Clinic",
+            provider_name="Dr. Rivera",
+            ai_system_name="CareSignal GPT",
+            ai_use_purpose="monitor chronic conditions and support faster follow-up",
+            ai_case_use_description="The system reviews incoming monitoring data and drafts follow-up suggestions for clinician review.",
+            human_review_description="A licensed clinician reviews all AI-generated outputs before any care decision is made.",
+            opt_out_alternative_description="We can provide a standard clinician-led workflow if you opt out of AI-supported care.",
+            model_training_use_description="No patient data will be used to improve a model without additional express consent.",
+            data_used=["vitals", "medical history"],
+            ai_role="substantial_factor",
+            decision_type="treatment",
+            function_category="treatment_support",
+            human_licensed_review="yes",
+        )
+
+        payload = build_document_generation_input(
+            brief=brief,
+            case_facts=case_facts,
+            template_text="Keep our organization name in the footer.",
+        )
+
+        self.assertIn("canonical_template", payload)
+        self.assertEqual(payload["canonical_template"]["template_id"], "patient_consent_form_v1")
+        self.assertEqual(payload["canonical_template"]["title"], "Patient Consent Form")
+        self.assertEqual(
+            payload["canonical_template"]["sections"][1]["heading"],
+            "1. Introduction to AI Use in Your Care",
+        )
+        self.assertEqual(
+            payload["canonical_template"]["sections"][0]["field_values"]["Patient Name"],
+            "Jane Doe",
+        )
+        self.assertTrue(
+            payload["canonical_template"]["scenario_flags"][
+                "diagnosis_or_treatment_planning_context"
+            ]
+        )
+        self.assertEqual(payload["template_text"], "Keep our organization name in the footer.")
 
     def test_malformed_provider_response(self) -> None:
         brief = make_brief()

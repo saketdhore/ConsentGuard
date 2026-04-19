@@ -13,6 +13,7 @@ from engine.schemas import (
     EvaluationItemSchema,
     EvaluationResultSchema,
     FormatConstraintEnum,
+    JurisdictionEnum,
 )
 from engine.services import (
     DocumentGenerationError,
@@ -44,8 +45,14 @@ STEP_KEYWORDS = [
     "Summary",
 ]
 
-# ---------- Canonical enum options (DO NOT change these) ----------
-JURISDICTION = ["TX"]
+# ---------- Canonical enum options ----------
+# Demo dropdown availability is broader than implemented law coverage. The
+# engine still only returns results for jurisdictions with matching law packs.
+JURISDICTION = [
+    jurisdiction.value
+    for jurisdiction in JurisdictionEnum
+    if jurisdiction is not JurisdictionEnum.NOT_APPLICABLE
+]
 
 ENTITY = ["licensed", "unlicensed", "not_sure"]
 
@@ -467,7 +474,59 @@ HUMAN_REVIEW_OVERRIDES = {
     "no": "No",
 }
 
-JURISDICTION_OVERRIDES = {"TX": "Texas"}
+JURISDICTION_OVERRIDES = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DC": "District of Columbia",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "IA": "Iowa",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "MA": "Massachusetts",
+    "MD": "Maryland",
+    "ME": "Maine",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MO": "Missouri",
+    "MS": "Mississippi",
+    "MT": "Montana",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "NE": "Nebraska",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NV": "Nevada",
+    "NY": "New York",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VA": "Virginia",
+    "VT": "Vermont",
+    "WA": "Washington",
+    "WI": "Wisconsin",
+    "WV": "West Virginia",
+    "WY": "Wyoming",
+}
 
 ENTITY_OVERRIDES = {
     "licensed": "Licensed",
@@ -531,10 +590,18 @@ def dedupe_preserve_order(items):
     return out
 
 
+def jurisdiction_has_rule_pack(jurisdiction):
+    return bool(jurisdiction) and os.path.isdir(os.path.join(LAWS_ROOT, jurisdiction))
+
+
 def get_law_paths(jurisdiction):
-    """Rule packs ship under TX; engine still gates matches on derived jurisdiction facts."""
-    laws_dir = f"{LAWS_ROOT}/TX"
-    enforcement_dir = f"{laws_dir}/enforcement"
+    """Load the selected jurisdiction pack and its matching enforcement files."""
+    laws_dir = os.path.join(LAWS_ROOT, jurisdiction) if jurisdiction else LAWS_ROOT
+    if not os.path.isdir(laws_dir):
+        laws_dir = LAWS_ROOT
+    enforcement_dir = os.path.join(laws_dir, "enforcement")
+    if not os.path.isdir(enforcement_dir):
+        enforcement_dir = None
     return laws_dir, enforcement_dir
 
 
@@ -561,6 +628,7 @@ def get_default_case_fact_inputs():
     return {
         "patient_name": "",
         "date_of_birth": "",
+        "document_date": "",
         "medical_record_number": "",
         "practice_name": "",
         "provider_name": "",
@@ -568,6 +636,8 @@ def get_default_case_fact_inputs():
         "ai_use_purpose": "",
         "ai_case_use_description": "",
         "human_review_description": "",
+        "opt_out_alternative_description": "",
+        "model_training_use_description": "",
         "data_used_text": "",
         "template_text": "",
     }
@@ -786,11 +856,11 @@ def build_survey_select(canonical_values, overrides=None):
 
 
 def build_jurisdiction_survey_labels():
-    _, _, jt = label_map(JURISDICTION, JURISDICTION_OVERRIDES)
-    tx_lbl = jt["TX"]
-    labels = [PLACEHOLDER_LABEL, tx_lbl, NA_UI_LABEL]
-    label_to_value = {PLACEHOLDER_LABEL: None, tx_lbl: "TX", NA_UI_LABEL: NA_VALUE}
-    return labels, label_to_value
+    ordered_jurisdictions = sorted(
+        JURISDICTION,
+        key=lambda value: JURISDICTION_OVERRIDES.get(value, value),
+    )
+    return build_survey_select(ordered_jurisdictions, JURISDICTION_OVERRIDES)
 
 
 def survey_index_for_form_value(value, labels, label_to_value):
@@ -945,6 +1015,9 @@ def seed_case_fact_inputs_from_context(form_data, result_facts):
             if form_data.get("human_licensed_review") == "yes"
             else "Describe any human review or operational oversight applied before the AI output is used."
         ),
+        "opt_out_alternative_description": (
+            "If you prefer not to use AI-supported services, we can discuss reasonable clinician-led or standard-care alternatives when available."
+        ),
         "data_used_text": ct_label,
     }
 
@@ -966,6 +1039,7 @@ def build_case_facts_for_generation(form_data, case_fact_inputs):
         primary_user=form_data.get("primary_user"),
         patient_name=case_fact_inputs.get("patient_name") or None,
         date_of_birth=case_fact_inputs.get("date_of_birth") or None,
+        document_date=case_fact_inputs.get("document_date") or None,
         medical_record_number=case_fact_inputs.get("medical_record_number") or None,
         practice_name=case_fact_inputs.get("practice_name") or None,
         provider_name=case_fact_inputs.get("provider_name") or None,
@@ -973,6 +1047,12 @@ def build_case_facts_for_generation(form_data, case_fact_inputs):
         ai_use_purpose=case_fact_inputs.get("ai_use_purpose") or None,
         ai_case_use_description=case_fact_inputs.get("ai_case_use_description") or None,
         human_review_description=case_fact_inputs.get("human_review_description") or None,
+        opt_out_alternative_description=(
+            case_fact_inputs.get("opt_out_alternative_description") or None
+        ),
+        model_training_use_description=(
+            case_fact_inputs.get("model_training_use_description") or None
+        ),
         data_used=parse_data_used_text(case_fact_inputs.get("data_used_text")),
         ai_role=form_data.get("ai_role"),
         independent_evaluation=form_data.get("independent_evaluation"),
@@ -1075,9 +1155,11 @@ def build_evaluation_item(law_id, item, item_kind, default_citation=None):
         requirement_type=requirement_type,
         citation=item.get("citation") or default_citation,
         timing_rule=item.get("timing"),
+        recipient=item.get("recipient"),
         format_constraints=format_constraints,
         requirements=requirements,
         source_trigger_ids=item.get("applies_when", []),
+        section_targets=item.get("section_targets", []),
     )
 
 
@@ -1085,7 +1167,7 @@ def build_document_preview_text(document):
     lines = [document.title, "=" * len(document.title), ""]
 
     for section in sorted(document.sections, key=lambda item: item.order):
-        heading = section.heading or pretty_label(section.section_id.value)
+        heading = section.heading or default_document_section_heading(section.section_id)
         lines.append(heading)
         lines.append("-" * len(heading))
         if section.body:
@@ -1097,13 +1179,14 @@ def build_document_preview_text(document):
     if document.signature_block is not None:
         lines.append("Signature Block")
         lines.append("---------------")
-        lines.append(document.signature_block.signer_label)
+        if document.signature_block.signature_required:
+            lines.append(_signature_line_text(document.signature_block.signer_label))
+        else:
+            lines.append(document.signature_block.signer_label)
         if document.signature_block.acknowledgment_text:
             lines.append(document.signature_block.acknowledgment_text)
         if document.signature_block.date_required:
             lines.append("Date: __________________")
-        if document.signature_block.signature_required:
-            lines.append("Signature: __________________")
         lines.append("")
 
     return "\n".join(lines).strip()
@@ -1112,22 +1195,51 @@ def build_document_preview_text(document):
 def render_generated_document_preview(document):
     st.markdown(f"### {document.title}")
     for section in sorted(document.sections, key=lambda item: item.order):
-        heading = section.heading or pretty_label(section.section_id.value)
+        heading = section.heading or default_document_section_heading(section.section_id)
         st.markdown(f"#### {heading}")
         if section.body:
-            st.markdown(section.body)
+            st.markdown(section.body.replace("\n", "  \n"))
         for bullet in section.bullets:
             st.markdown(f"- {bullet}")
 
     if document.signature_block is not None:
         st.markdown("#### Signature Block")
-        st.markdown(document.signature_block.signer_label)
+        if document.signature_block.signature_required:
+            st.markdown(_signature_line_text(document.signature_block.signer_label))
+        else:
+            st.markdown(document.signature_block.signer_label)
         if document.signature_block.acknowledgment_text:
-            st.markdown(document.signature_block.acknowledgment_text)
+            st.markdown(document.signature_block.acknowledgment_text.replace("\n", "  \n"))
         if document.signature_block.date_required:
             st.markdown("Date: __________________")
-        if document.signature_block.signature_required:
-            st.markdown("Signature: __________________")
+
+
+def default_document_section_heading(section_id):
+    headings = {
+        "patient_information": "Patient Information",
+        "introduction": "Introduction",
+        "ai_use_disclosure": "AI Use Disclosure",
+        "purpose_of_ai_use": "Purpose Of AI Use",
+        "how_ai_was_used": "How The AI System Works",
+        "human_review_statement": "Human Review Statement",
+        "privacy_and_security": "Privacy And Security",
+        "benefits_and_risks": "Benefits And Risks",
+        "patient_rights": "Patient Rights",
+        "consent_or_acknowledgment": "Consent Or Acknowledgment",
+        "signature_block": "Signature Block",
+        "footer_notes": "Footer Notes",
+    }
+    section_key = getattr(section_id, "value", section_id)
+    return headings.get(section_key, pretty_label(str(section_key)))
+
+
+def _signature_line_text(signer_label):
+    normalized = (signer_label or "Signature").strip()
+    if "____" in normalized:
+        return normalized
+    if normalized.endswith(":"):
+        return f"{normalized} __________________"
+    return f"{normalized}: __________________"
 
 
 # ---------- Styling (professional brand palette) ----------
@@ -1518,7 +1630,7 @@ if view == 1:
             st.markdown(f"<p class='step-indicator'>STEP 1/{TOTAL_STEPS}</p>", unsafe_allow_html=True)
             st.markdown("### Where is the system deployed?")
             legal_md(
-                "Jurisdiction determines whether these Texas triggers apply. Texas rules are evaluated when deployment or use occurs in this state.",
+                "Jurisdiction determines which state rule pack applies. ConsentGuard evaluates the selected state's rules when deployment or use occurs there.",
                 small=True,
                 track_question_terms=True,
             )
@@ -2086,6 +2198,14 @@ if view == "results":
     terms_defined_in_questions = st.session_state.get("question_defined_terms", set())
 
     if not matched:
+        selected_jurisdiction = form_data.get("jurisdiction")
+        if selected_jurisdiction and not jurisdiction_has_rule_pack(selected_jurisdiction):
+            jurisdiction_label = JUR_TO_LABEL.get(
+                selected_jurisdiction, selected_jurisdiction
+            )
+            st.info(
+                f"{jurisdiction_label} is selectable for demo purposes, but ConsentGuard does not yet have a law pack implemented for that jurisdiction."
+            )
         st.warning("No applicable laws triggered for these inputs.")
         st.markdown("---")
         st.markdown("### Generate Patient Disclosure / Consent Document")
@@ -2138,9 +2258,6 @@ if view == "results":
             if not any_pb:
                 st.write("No prohibitions for this scenario.")
 
-        with st.expander("Debug: derived facts", expanded=False):
-            st.json(result_facts)
-
         seed_case_fact_inputs_from_context(form_data, result_facts)
 
         st.markdown("---")
@@ -2169,6 +2286,11 @@ if view == "results":
                     "DOB",
                     value=case_fact_inputs.get("date_of_birth", ""),
                     help="Use the format your organization prefers.",
+                )
+                document_date = st.text_input(
+                    "Document date",
+                    value=case_fact_inputs.get("document_date", ""),
+                    help="Leave blank to let the generated form use a placeholder.",
                 )
                 medical_record_number = st.text_input(
                     "Medical record number (if applicable)",
@@ -2202,6 +2324,18 @@ if view == "results":
                     value=case_fact_inputs.get("human_review_description", ""),
                     height=100,
                 )
+                opt_out_alternative_description = st.text_area(
+                    "Opt-out alternatives (optional)",
+                    value=case_fact_inputs.get("opt_out_alternative_description", ""),
+                    height=90,
+                    help="Describe reasonable non-AI or standard-care alternatives if the patient declines AI-supported care.",
+                )
+                model_training_use_description = st.text_area(
+                    "Model training / additional data-use disclosure (optional)",
+                    value=case_fact_inputs.get("model_training_use_description", ""),
+                    height=90,
+                    help="Use this if patient data will be used to build, fine-tune, or improve a model, or if additional data-use consent is needed.",
+                )
                 data_used_text = st.text_area(
                     "Data used",
                     value=case_fact_inputs.get("data_used_text", ""),
@@ -2209,9 +2343,10 @@ if view == "results":
                     help="Enter comma-separated or line-separated data inputs.",
                 )
                 template_text = st.text_area(
-                    "Base consent/disclosure text (optional)",
+                    "Supplemental drafting instructions (optional)",
                     value=case_fact_inputs.get("template_text", ""),
                     height=100,
+                    help="ConsentGuard now applies its canonical patient consent template automatically when appropriate. Use this box only for supplemental organization-specific instructions.",
                 )
 
             generate_clicked = st.form_submit_button(
@@ -2224,6 +2359,7 @@ if view == "results":
             st.session_state.case_fact_inputs = {
                 "patient_name": patient_name,
                 "date_of_birth": date_of_birth,
+                "document_date": document_date,
                 "medical_record_number": medical_record_number,
                 "practice_name": practice_name,
                 "provider_name": provider_name,
@@ -2231,11 +2367,15 @@ if view == "results":
                 "ai_use_purpose": ai_use_purpose,
                 "ai_case_use_description": ai_case_use_description,
                 "human_review_description": human_review_description,
+                "opt_out_alternative_description": opt_out_alternative_description,
+                "model_training_use_description": model_training_use_description,
                 "data_used_text": data_used_text,
                 "template_text": template_text,
             }
 
-            required_fields = [
+            optional_guidance_fields = [
+                ("patient_name", "Patient name"),
+                ("date_of_birth", "DOB"),
                 ("practice_name", "Practice name"),
                 ("provider_name", "Provider name"),
                 ("ai_system_name", "AI system name"),
@@ -2244,19 +2384,9 @@ if view == "results":
                 ("human_review_description", "Human review description"),
                 ("data_used_text", "Data used"),
             ]
-            if (
-                form_data.get("primary_user") == "patient"
-                or form_data.get("content_type") == "patient_clinical_information"
-            ):
-                required_fields = [
-                    ("patient_name", "Patient name"),
-                    ("date_of_birth", "DOB"),
-                    *required_fields,
-                ]
-
             missing_case_fields = [
                 label
-                for key, label in required_fields
+                for key, label in optional_guidance_fields
                 if not st.session_state.case_fact_inputs.get(key, "").strip()
             ]
 
@@ -2265,52 +2395,50 @@ if view == "results":
             st.session_state.document_generation_error = None
             st.session_state.consent_brief = None
 
-            if missing_case_fields:
-                st.session_state.document_generation_error = (
-                    "Please complete the required case facts before generating the document."
+            try:
+                evaluation_result = build_evaluation_result_for_generation(
+                    result,
+                    fallback_jurisdiction=form_data.get("jurisdiction"),
                 )
-            else:
-                try:
-                    evaluation_result = build_evaluation_result_for_generation(
-                        result,
-                        fallback_jurisdiction=form_data.get("jurisdiction"),
-                    )
-                    case_facts = build_case_facts_for_generation(
-                        form_data,
-                        st.session_state.case_fact_inputs,
-                    )
-                    brief = build_consent_document_brief(evaluation_result, case_facts)
-                    st.session_state.consent_brief = brief
+                case_facts = build_case_facts_for_generation(
+                    form_data,
+                    st.session_state.case_fact_inputs,
+                )
+                brief = build_consent_document_brief(evaluation_result, case_facts)
+                st.session_state.consent_brief = brief
 
-                    if brief.generation_blockers:
-                        st.session_state.document_generation_error = (
-                            "Document generation is blocked until the issues below are resolved."
-                        )
-                    else:
-                        generated_document = generate_document_from_brief(
-                            brief=brief,
-                            case_facts=case_facts,
-                            template_text=(
-                                st.session_state.case_fact_inputs.get("template_text") or None
-                            ),
-                        )
-                        validation_result = validate_generated_document(
-                            brief,
-                            generated_document,
-                        )
-                        st.session_state.generated_document = generated_document
-                        st.session_state.document_validation = validation_result
-                except DocumentGenerationError as exc:
-                    st.session_state.document_generation_error = str(exc)
-                except Exception as exc:
+                if brief.generation_blockers:
                     st.session_state.document_generation_error = (
-                        f"Unable to generate the document: {exc}"
+                        "Document generation is blocked until the issues below are resolved."
                     )
+                else:
+                    generated_document = generate_document_from_brief(
+                        brief=brief,
+                        case_facts=case_facts,
+                        template_text=(
+                            st.session_state.case_fact_inputs.get("template_text") or None
+                        ),
+                    )
+                    validation_result = validate_generated_document(
+                        brief,
+                        generated_document,
+                    )
+                    st.session_state.generated_document = generated_document
+                    st.session_state.document_validation = validation_result
+            except DocumentGenerationError as exc:
+                st.session_state.document_generation_error = str(exc)
+            except Exception as exc:
+                st.session_state.document_generation_error = (
+                    f"Unable to generate the document: {exc}"
+                )
 
         if st.session_state.document_generation_error:
             st.error(st.session_state.document_generation_error)
 
         if generate_clicked and "missing_case_fields" in locals() and missing_case_fields:
+            st.info(
+                "Some case facts were left blank. ConsentGuard used neutral placeholders or template defaults where possible."
+            )
             st.markdown("**Missing case facts**")
             for label in missing_case_fields:
                 st.markdown(f"- {label}")

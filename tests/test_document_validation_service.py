@@ -227,6 +227,192 @@ class DocumentValidationServiceTests(unittest.TestCase):
             any("signature block" in failure for failure in result.failed_constraints)
         )
 
+    def test_patient_consent_template_requires_opt_out_language(self) -> None:
+        brief = make_brief(
+            required_sections=[
+                DocumentSectionIdEnum.PATIENT_INFORMATION,
+                DocumentSectionIdEnum.INTRODUCTION,
+                DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+                DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+                DocumentSectionIdEnum.PATIENT_RIGHTS,
+                DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+                DocumentSectionIdEnum.SIGNATURE_BLOCK,
+            ],
+            section_points={
+                DocumentSectionIdEnum.PATIENT_INFORMATION: [
+                    "Include Patient Name, Date of Birth, Medical Record Number, Provider Name, Practice Name, and Date."
+                ],
+                DocumentSectionIdEnum.INTRODUCTION: [
+                    "Explain that the practice uses an AI system as part of the patient's care."
+                ],
+                DocumentSectionIdEnum.AI_USE_DISCLOSURE: [
+                    "State that AI is used as part of the healthcare service."
+                ],
+                DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT: [
+                    "State that a licensed healthcare professional reviews AI outputs and makes the final care decision."
+                ],
+                DocumentSectionIdEnum.PATIENT_RIGHTS: [
+                    "State that the patient may opt out or withdraw consent without losing access to standard care."
+                ],
+                DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT: [
+                    "State that the patient read and understood the form and consents to the described AI use."
+                ],
+                DocumentSectionIdEnum.SIGNATURE_BLOCK: [],
+            },
+            signature_required=True,
+            affirmative_consent_required=True,
+        )
+        document = make_document(
+            brief,
+            sections=[
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.PATIENT_INFORMATION,
+                    order=1,
+                    body="Patient Name: Jane Doe\nDate of Birth: 1990-01-01\nProvider Name: Dr. Rivera",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.INTRODUCTION,
+                    order=2,
+                    body="North Clinic uses an AI system as part of the patient's care.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+                    order=3,
+                    body="Artificial intelligence is used as part of this healthcare service.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+                    order=4,
+                    body="A licensed clinician reviews AI outputs and makes the final decision.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.PATIENT_RIGHTS,
+                    order=5,
+                    body="You may ask questions about AI use in your care.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+                    order=6,
+                    body="I consent to the AI use described above.",
+                ),
+            ],
+            signature_block=SignatureBlockSchema(
+                signer_label="Patient Signature",
+                acknowledgment_text="Sign and date to provide consent.",
+            ),
+        )
+
+        result = validate_generated_document(brief, document)
+
+        self.assertFalse(result.is_valid)
+        self.assertTrue(
+            any("opt-out" in failure or "opt out" in failure for failure in result.failed_constraints)
+        )
+
+    def test_patient_consent_template_valid_document_passes(self) -> None:
+        brief = make_brief(
+            required_sections=[
+                DocumentSectionIdEnum.PATIENT_INFORMATION,
+                DocumentSectionIdEnum.INTRODUCTION,
+                DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+                DocumentSectionIdEnum.HOW_AI_WAS_USED,
+                DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+                DocumentSectionIdEnum.BENEFITS_AND_RISKS,
+                DocumentSectionIdEnum.PATIENT_RIGHTS,
+                DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+                DocumentSectionIdEnum.SIGNATURE_BLOCK,
+            ],
+            section_points={
+                DocumentSectionIdEnum.PATIENT_INFORMATION: [
+                    "Include Patient Name, Date of Birth, Medical Record Number, Provider Name, Practice Name, and Date."
+                ],
+                DocumentSectionIdEnum.INTRODUCTION: [
+                    "Explain that the practice uses an AI system as part of the patient's care."
+                ],
+                DocumentSectionIdEnum.AI_USE_DISCLOSURE: [
+                    "State that AI is used as part of the healthcare service."
+                ],
+                DocumentSectionIdEnum.HOW_AI_WAS_USED: [
+                    "Describe the data processed, how the data are handled, and the AI functions performed."
+                ],
+                DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT: [
+                    "State that a licensed healthcare professional reviews AI outputs and makes the final care decision."
+                ],
+                DocumentSectionIdEnum.BENEFITS_AND_RISKS: [
+                    "Describe material benefits of the AI-supported workflow.",
+                    "Describe material risks and limitations of the AI-supported workflow.",
+                ],
+                DocumentSectionIdEnum.PATIENT_RIGHTS: [
+                    "State that the patient may ask questions about how AI is used in care.",
+                    "State that the patient may opt out or withdraw consent without losing access to standard care.",
+                ],
+                DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT: [
+                    "State that the patient read and understood the form and consents to the described AI use."
+                ],
+                DocumentSectionIdEnum.SIGNATURE_BLOCK: [],
+            },
+            signature_required=True,
+            affirmative_consent_required=True,
+        )
+        document = make_document(
+            brief,
+            sections=[
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.PATIENT_INFORMATION,
+                    order=1,
+                    body="Patient Name: Jane Doe\nDate of Birth: 1990-01-01\nMedical Record Number: 1001\nProvider Name: Dr. Rivera\nPractice Name: North Clinic\nDate: 2026-04-19",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.INTRODUCTION,
+                    order=2,
+                    body="North Clinic uses an AI system as part of the patient's care.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+                    order=3,
+                    body="Artificial intelligence is used as part of this healthcare service and supports, but does not replace, licensed professionals.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.HOW_AI_WAS_USED,
+                    order=4,
+                    body="The AI reviews submitted monitoring data and summarizes patterns for clinician review.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+                    order=5,
+                    body="A licensed clinician reviews AI outputs and makes the final care decision.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.BENEFITS_AND_RISKS,
+                    order=6,
+                    body="Benefits and risks are summarized below.",
+                    bullets=[
+                        "Benefit: faster identification of issues",
+                        "Risk: inaccurate or incomplete suggestions",
+                    ],
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.PATIENT_RIGHTS,
+                    order=7,
+                    body="You may ask questions, opt out, or withdraw consent without losing access to standard care.",
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+                    order=8,
+                    body="I have read and understood this form and consent to the AI use described above.",
+                ),
+            ],
+            signature_block=SignatureBlockSchema(
+                signer_label="Patient Signature",
+                acknowledgment_text="Sign and date to provide consent.",
+            ),
+        )
+
+        result = validate_generated_document(brief, document)
+
+        self.assertTrue(result.is_valid)
+        self.assertEqual(result.failed_constraints, [])
+
     def test_blocker_triggered_failure(self) -> None:
         brief = make_brief(
             required_sections=[DocumentSectionIdEnum.AI_USE_DISCLOSURE],

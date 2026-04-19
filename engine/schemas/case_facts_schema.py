@@ -33,6 +33,7 @@ class CaseFactsSchema:
     primary_user: PrimaryUserEnum | None = None
     patient_name: str | None = None
     date_of_birth: str | None = None
+    document_date: str | None = None
     medical_record_number: str | None = None
     practice_name: str | None = None
     provider_name: str | None = None
@@ -40,6 +41,8 @@ class CaseFactsSchema:
     ai_use_purpose: str | None = None
     ai_case_use_description: str | None = None
     human_review_description: str | None = None
+    opt_out_alternative_description: str | None = None
+    model_training_use_description: str | None = None
     data_used: list[str] = field(default_factory=list)
     ai_role: AIRoleEnum | None = None
     independent_evaluation: IndependentEvaluationEnum | None = None
@@ -63,6 +66,7 @@ class CaseFactsSchema:
         )
         self.patient_name = normalize_optional_text(self.patient_name, "patient_name")
         self.date_of_birth = normalize_optional_text(self.date_of_birth, "date_of_birth")
+        self.document_date = normalize_optional_text(self.document_date, "document_date")
         self.medical_record_number = normalize_optional_text(
             self.medical_record_number, "medical_record_number"
         )
@@ -77,6 +81,14 @@ class CaseFactsSchema:
         )
         self.human_review_description = normalize_optional_text(
             self.human_review_description, "human_review_description"
+        )
+        self.opt_out_alternative_description = normalize_optional_text(
+            self.opt_out_alternative_description,
+            "opt_out_alternative_description",
+        )
+        self.model_training_use_description = normalize_optional_text(
+            self.model_training_use_description,
+            "model_training_use_description",
         )
         self.data_used = ensure_string_list(self.data_used, "data_used")
         self.ai_role = coerce_optional_enum(self.ai_role, AIRoleEnum, "ai_role")

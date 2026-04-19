@@ -1,138 +1,123 @@
 # ConsentGuard
 
-ConsentGuard is a Streamlit prototype for evaluating health AI use cases against declarative legal rules and generating patient-facing disclosure or consent drafts from the matched obligations.
+ConsentGuard is a rule-based compliance prototype for healthcare AI. It evaluates structured use-case inputs against declarative state-law JSON, extracts obligations and prohibitions, and can turn patient-facing requirements into validated disclosure or consent drafts.
 
-## What The App Does
+## Project Overview
 
-ConsentGuard currently supports two connected workflows:
+Healthcare AI teams often need two things at once:
+- a deterministic way to understand which legal obligations a use case triggers
+- a practical way to turn those obligations into patient-facing disclosure or consent documents
 
-1. Structured compliance evaluation
-   The user answers a guided intake using the standardized taxonomy. The engine derives reusable facts, evaluates law JSON files, and returns matched laws, obligations, prohibitions, and exceptions.
-
-2. Disclosure / consent draft generation
-   After evaluation, the user can enter case-specific facts. ConsentGuard builds a deterministic brief, asks OpenAI for a structured draft, validates the result, previews it in the app, and allows download as `.txt`.
-
-## Current Coverage
-
-- The taxonomy supports `CA`, `IL`, `TX`, `CO`, and `UT`.
-- The currently populated law content is Texas-focused under `laws/TX`.
-- Non-Texas selections may complete the intake flow but will not return the same rule coverage until more jurisdiction content is added.
-
-## Project Layout
+ConsentGuard separates those concerns cleanly:
 
 ```text
-app.py                         Streamlit intake, evaluation UI, and draft-generation UI
-engine/
-  config.py                    .env loading helpers
-  engine.py                    top-level evaluation orchestration
-  derive_facts.py              reusable legal fact derivation
-  matcher.py                   declarative trigger matching DSL
-  loader.py                    law JSON loading
-  providers/
-    openai_provider.py         OpenAI Responses API wrapper
-  schemas/
-    ...                        typed contracts for facts, briefs, results, documents, validation
-  services/
-    consent_brief_service.py   deterministic brief builder
-    document_generation_service.py
-                                OpenAI-backed structured draft generation
-    document_validation_service.py
-                                deterministic validation of generated drafts
-laws/
-  TX/                          Texas rule files
-tests/                         unit tests for brief, generation, and validation services
-test.py                        manual scenario runner
+structured intake
+-> derived legal facts
+-> law matching
+-> obligations / prohibitions / exceptions
+-> deterministic document brief
+-> LLM draft generation
+-> deterministic validation
+-> preview + download
 ```
 
-## Running Locally
+The legal decision logic is rule-based. The LLM is used only to draft language after the legal requirements are already fixed.
 
-1. Create and activate a virtual environment.
+## Key Features
+
+- Deterministic legal evaluation engine driven by JSON law files
+- Reusable fact derivation layer for higher-level legal concepts
+- Current state-law coverage for Texas and Illinois
+- Structured outputs for obligations, prohibitions, exceptions, and enforcement references
+- Patient disclosure / consent document generation from a deterministic brief
+- Canonical patient consent form support for qualifying consent scenarios
+- Post-generation validation for required sections, consent language, opt-out language, and signature requirements
+- Modular architecture with separate engine, schema, service, provider, and UI layers
+
+## Current Law Coverage
+
+- Texas
+  - `TX_BCC_503_001` commercial biometric privacy
+  - `TX_BCC_551_002_003` general AI deployment transparency
+  - `TX_BCC_552_051` consumer and healthcare-service AI disclosure
+  - `TX_HSC_183_005` licensed practitioner diagnostic / treatment-support disclosure
+- Illinois
+  - `IL_225_ILCS_155` therapy / psychotherapy AI compliance, including prohibitions, disclosure / consent duties, and confidentiality
+
+The Streamlit jurisdiction dropdown shows all 50 states plus DC for demo purposes, but the implemented legal rule packs in this repo are currently Texas and Illinois.
+
+## How It Works
+
+1. The user completes a structured intake in Streamlit.
+2. `engine/derive_facts.py` converts raw answers into reusable legal facts.
+3. `engine/loader.py` loads JSON law files and enforcement files.
+4. `engine/matcher.py` evaluates trigger blocks deterministically.
+5. `engine/engine.py` returns matched laws plus applicable obligations and prohibitions.
+6. The app converts those results into typed evaluation items and builds a deterministic consent / disclosure brief.
+7. If generation is allowed, OpenAI produces a structured draft document.
+8. The draft is validated against the brief before preview and `.txt` download.
+
+## Example Use Cases
+
+- Evaluating whether a healthcare AI workflow triggers Texas disclosure duties
+- Determining whether an Illinois therapy AI use case is prohibited or requires written consent
+- Generating patient-facing disclosures from matched obligations
+- Supporting internal compliance review with a deterministic legal rules engine
+
+## Tech Stack
+
+- Python
+- Streamlit for the interactive intake and document workflow UI
+- JSON-based law representation
+- Standard library HTTP client for the OpenAI Responses API
+- OpenAI structured outputs for document drafting only
+- `unittest` for automated validation of legal evaluation and document workflows
+
+## Running Locally
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\activate
-```
-
-2. Install dependencies.
-
-```powershell
 pip install -r requirements.txt
 ```
 
-3. Create a `.env` file in the repository root and supply your own OpenAI API key.
+Create a repo-root `.env`:
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-Notes:
-- You must use your own OpenAI API key.
-- If `OPENAI_API_KEY` is missing, legal evaluation still works, but document generation is disabled.
-- The app also supports `engine/.env` for compatibility, but the recommended location is the repo-root `.env`.
-
-4. Start the Streamlit app.
+Then start the app:
 
 ```powershell
 streamlit run app.py
 ```
 
-5. Open the local Streamlit URL shown in the terminal and run through the intake flow.
-
-## Using The Generation Workflow
-
-1. Complete the intake wizard and submit the case.
-2. Review matched laws, obligations, and prohibitions.
-3. In `Generate Patient Disclosure / Consent Document`, enter the case-specific facts.
-4. Generate the draft.
-5. Review the validation result.
-6. Preview the document in the app and download the `.txt` file.
-
-If validation fails, the app still shows the generated draft so it can be reviewed manually.
-
-## Standardized Taxonomy
-
-The codebase uses the following snake_case schema throughout the UI, backend, laws, tests, and document-generation pipeline:
-
-- `jurisdiction`: `CA`, `IL`, `TX`, `CO`, `UT`
-- `entity`: `licensed`, `unlicensed`, `not_sure`
-- `primary_user`: `patient`, `health_care_professional`, `care_team`, `administrator`, `researcher`, `internal_team`
-- `clinical_domain`: `general_health`, `mental_health`, `emergency_care`, `wellness_care_coordination`, `specialty_care`
-- `ai_role`: `assistive`, `substantial_factor`, `autonomous`
-- `independent_evaluation`: `yes`, `no`
-- `function_category`: `patient_communication_genAI`, `clinical_decision_support`, `medical_imaging_analysis`, `triage_risk_scoring`, `treatment_support`, `clinical_documentation`, `remote_patient_monitoring`, `administrative_only`, `research_only`
-- `content_type`: `patient_clinical_information`, `non_clinical_health_information`, `administrative_only`
-- `human_licensed_review`: `yes`, `no`
-- `communication_channel`: `chatbot`, `portal_message`, `email_letter`, `audio`, `video`, `in_person_support`
-- `decision_type`: `diagnosis`, `triage`, `treatment`, `monitoring_alert`, `documentation`, `administrative`
-- `sensitive_information`: `yes`, `no`
-- `model_changes`: `static`, `periodic_updates`, `continuous_learning`
-
-`communication_channel` is only applicable when `primary_user == "patient"`.
+Notes:
+- Legal evaluation works without `OPENAI_API_KEY`.
+- Document generation is disabled if the OpenAI key is missing.
+- `engine/.env` is also supported as a fallback load location.
 
 ## Testing
 
-Run the service-level test suite with:
+Run the automated test suite:
 
 ```powershell
-python -B -m unittest tests.test_consent_brief_service tests.test_document_validation_service tests.test_document_generation_service
+python -B -m unittest discover tests
 ```
 
-Run the manual scenario script with:
+Run the manual scenario script:
 
 ```powershell
 python test.py
 ```
 
-## Migration Notes
+## Design Philosophy
 
-Legacy filters were replaced with the following mappings:
+- Deterministic legal logic first. Laws are evaluated through JSON rules and Python fact derivation, not free-form LLM reasoning.
+- LLMs only generate language. They do not decide whether a law applies.
+- Structured intermediates everywhere. Evaluation results, briefs, generated documents, and validation results all have typed schema contracts.
+- Validation is mandatory. A draft is checked against legal requirements before it is presented as a compliant output.
 
-| Legacy | New |
-| --- | --- |
-| `entity_type` | `entity` |
-| `user_type` | `primary_user` |
-| `patient_facing` | `primary_user = patient` |
-| `ai_influence` | `ai_role` |
-| `ehr_data` | `content_type = patient_clinical_information` |
-| `model_update_type` | `model_changes` |
+For a deeper technical walkthrough, see [CODEBASE_OVERVIEW.md](/C:/ConsentGuard/CODEBASE_OVERVIEW.md).

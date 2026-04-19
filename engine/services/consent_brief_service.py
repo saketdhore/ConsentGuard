@@ -80,6 +80,18 @@ REQUIREMENT_TYPE_TO_SECTIONS = {
     RequirementTypeEnum.EXCEPTION: [DocumentSectionIdEnum.FOOTER_NOTES],
 }
 
+PATIENT_CONSENT_TEMPLATE_SECTIONS = [
+    DocumentSectionIdEnum.PATIENT_INFORMATION,
+    DocumentSectionIdEnum.INTRODUCTION,
+    DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+    DocumentSectionIdEnum.HOW_AI_WAS_USED,
+    DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+    DocumentSectionIdEnum.BENEFITS_AND_RISKS,
+    DocumentSectionIdEnum.PATIENT_RIGHTS,
+    DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+    DocumentSectionIdEnum.SIGNATURE_BLOCK,
+]
+
 
 def build_consent_document_brief(
     evaluation_result: EvaluationResultSchema | dict,
@@ -138,16 +150,28 @@ def build_consent_document_brief(
     section_points: dict[DocumentSectionIdEnum, OrderedDict[str, None]] = {}
     section_sources: dict[DocumentSectionIdEnum, OrderedDict[str, None]] = {}
     timing_candidates: list[TimingRuleEnum] = []
+    uses_patient_consent_template = _uses_patient_consent_template(
+        document_type,
+        audience,
+    )
 
-    if patient_facing_transformable_obligations:
-        _add_section_point(
-            section_points,
-            section_sources,
-            DocumentSectionIdEnum.INTRODUCTION,
-            "Introduce why the recipient is receiving this AI disclosure or consent document.",
+    if uses_patient_consent_template:
+        _add_patient_consent_template_sections(
+            case_facts=case_facts,
+            section_points=section_points,
+            section_sources=section_sources,
+            drafting_constraints=drafting_constraints,
         )
+    else:
+        if patient_facing_transformable_obligations:
+            _add_section_point(
+                section_points,
+                section_sources,
+                DocumentSectionIdEnum.INTRODUCTION,
+                "Introduce why the recipient is receiving this AI disclosure or consent document.",
+            )
 
-    _add_case_fact_sections(case_facts, section_points, section_sources)
+        _add_case_fact_sections(case_facts, section_points, section_sources)
 
     for item in obligation_items:
         _ingest_item(
@@ -181,6 +205,12 @@ def build_consent_document_brief(
             )
 
     timing_rule = _resolve_timing_rule(timing_candidates, generation_blockers)
+    if uses_patient_consent_template:
+        _add_patient_consent_timing_point(
+            timing_rule=timing_rule,
+            section_points=section_points,
+            section_sources=section_sources,
+        )
 
     if not patient_facing_transformable_obligations:
         _append_unique_string(
@@ -204,7 +234,11 @@ def build_consent_document_brief(
         for point in section_points[section_id].keys()
     ]
 
-    title_hint = _build_title_hint(document_type, audience)
+    title_hint = _build_title_hint(
+        document_type,
+        audience,
+        uses_patient_consent_template=uses_patient_consent_template,
+    )
     source_requirement_ids = _collect_source_requirement_ids(
         obligation_items, prohibition_items, exception_items
     )
@@ -252,6 +286,20 @@ def _collect_exception_items(
         if item.requirement_type == RequirementTypeEnum.EXCEPTION:
             exceptions.append(item)
     return _dedupe_items(exceptions)
+
+
+def _uses_patient_consent_template(
+    document_type: ConsentDocumentTypeEnum,
+    audience: ConsentDocumentAudienceEnum,
+) -> bool:
+    return (
+        document_type == ConsentDocumentTypeEnum.DISCLOSURE_AND_CONSENT
+        and audience
+        in {
+            ConsentDocumentAudienceEnum.PATIENT,
+            ConsentDocumentAudienceEnum.PERSONAL_REPRESENTATIVE,
+        }
+    )
 
 
 def _determine_audience(
@@ -334,6 +382,224 @@ def _add_case_fact_sections(
         )
 
 
+def _add_patient_consent_template_sections(
+    *,
+    case_facts: CaseFactsSchema,
+    section_points: dict[DocumentSectionIdEnum, OrderedDict[str, None]],
+    section_sources: dict[DocumentSectionIdEnum, OrderedDict[str, None]],
+    drafting_constraints: list[str],
+) -> None:
+    _append_unique_string(
+        drafting_constraints,
+        "Use the canonical Patient Consent Form structure with clearly recognizable section headings.",
+    )
+    _append_unique_string(
+        drafting_constraints,
+        "When a factual field is unavailable, keep the field label and use a neutral placeholder instead of omitting the field.",
+    )
+
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.PATIENT_INFORMATION,
+        "Include Patient Name, Date of Birth, Medical Record Number, Provider Name, Practice Name, and Date.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.INTRODUCTION,
+        "Explain that the practice uses an AI system as part of the patient's care.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+        "State that AI is used as part of the healthcare service.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+        "State whether the AI is assistive, a substantial factor, or autonomous.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+        "Describe the type of clinical decision or support involved.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.HOW_AI_WAS_USED,
+        "Describe the data processed, how the data are handled, and the AI functions performed.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.BENEFITS_AND_RISKS,
+        "Describe material benefits of the AI-supported workflow.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.BENEFITS_AND_RISKS,
+        "Describe material risks and limitations of the AI-supported workflow.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.PATIENT_RIGHTS,
+        "State that the patient may ask questions about how AI is used in care.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.PATIENT_RIGHTS,
+        "State that the patient may opt out or withdraw consent without losing access to standard care.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.PATIENT_RIGHTS,
+        "State that consent is voluntary and refusal will not affect the ability to receive treatment.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+        "State that the patient read and understood the form, understands how AI will be used, and voluntarily consents to the described use.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.SIGNATURE_BLOCK,
+        "Include signature and date lines for the patient or personal representative.",
+    )
+
+    if case_facts.ai_use_purpose:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.INTRODUCTION,
+            case_facts.ai_use_purpose,
+        )
+
+    if case_facts.ai_case_use_description:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.HOW_AI_WAS_USED,
+            case_facts.ai_case_use_description,
+        )
+
+    if case_facts.data_used:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.HOW_AI_WAS_USED,
+            f"Data processed include: {', '.join(case_facts.data_used)}.",
+        )
+
+    if (
+        case_facts.content_type == ContentTypeEnum.PATIENT_CLINICAL_INFORMATION
+        or case_facts.sensitive_information == SensitiveInformationEnum.YES
+    ):
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.HOW_AI_WAS_USED,
+            "State that patient data will be protected with appropriate privacy and security safeguards.",
+        )
+
+    if case_facts.human_review_description:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+            case_facts.human_review_description,
+        )
+
+    if _requires_stronger_human_review_caution(case_facts):
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+            "Clearly describe any limited or absent human review, any autonomous or near-autonomous AI behavior, and the safeguards or escalation steps that remain.",
+        )
+    else:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+            "State that a licensed healthcare professional reviews AI outputs and makes the final care decision.",
+        )
+
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+        "State that the system is not a substitute for emergency medical care and direct patients to emergency services when appropriate.",
+    )
+
+    if case_facts.opt_out_alternative_description:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.PATIENT_RIGHTS,
+            case_facts.opt_out_alternative_description,
+        )
+    else:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.PATIENT_RIGHTS,
+            "Describe reasonable non-AI or standard-care alternatives when the patient opts out, if those alternatives are available.",
+        )
+
+    if case_facts.model_training_use_description:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.HOW_AI_WAS_USED,
+            case_facts.model_training_use_description,
+        )
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+            "Obtain express consent for any use of patient data to build, fine-tune, or improve a large language model or other generative AI model.",
+        )
+
+    if _is_diagnostic_or_treatment_planning_context(case_facts):
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
+            "If patient clinical data is uploaded to a large language model for diagnosis or treatment planning, disclose that use expressly and tie consent to that specific use.",
+        )
+
+
+def _requires_stronger_human_review_caution(case_facts: CaseFactsSchema) -> bool:
+    ai_role = _enum_value(case_facts.ai_role)
+    return case_facts.human_licensed_review == "no" or ai_role == "autonomous"
+
+
+def _is_diagnostic_or_treatment_planning_context(case_facts: CaseFactsSchema) -> bool:
+    function_category = _enum_value(case_facts.function_category)
+    decision_type = _enum_value(case_facts.decision_type)
+    return (
+        function_category in {"clinical_decision_support", "treatment_support"}
+        or decision_type in {"diagnosis", "treatment"}
+    )
+
+
+def _enum_value(value: object) -> str | None:
+    if value is None:
+        return None
+    return getattr(value, "value", value)
+
+
 def _ingest_item(
     item: EvaluationItemSchema,
     drafting_constraints: list[str],
@@ -410,10 +676,55 @@ def _resolve_timing_rule(
     return unique_candidates[0]
 
 
+def _add_patient_consent_timing_point(
+    *,
+    timing_rule: TimingRuleEnum | None,
+    section_points: dict[DocumentSectionIdEnum, OrderedDict[str, None]],
+    section_sources: dict[DocumentSectionIdEnum, OrderedDict[str, None]],
+) -> None:
+    if timing_rule is None:
+        _add_section_point(
+            section_points,
+            section_sources,
+            DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+            "State when the disclosure is being provided relative to care or AI use.",
+        )
+        return
+
+    timing_point = {
+        TimingRuleEnum.BEFORE_CAPTURE: (
+            "State that the disclosure and consent are provided before the AI-assisted activity occurs."
+        ),
+        TimingRuleEnum.AS_SOON_AS_REASONABLY_POSSIBLE: (
+            "State that the disclosure will be provided as soon as reasonably possible."
+        ),
+        TimingRuleEnum.NO_LATER_THAN_FIRST_DATE_OF_SERVICE: (
+            "State that the disclosure is provided no later than the start of care or the first date of service."
+        ),
+        TimingRuleEnum.AT_OR_BEFORE_USE: (
+            "State that the disclosure and consent are provided at or before the AI use occurs."
+        ),
+    }.get(
+        timing_rule,
+        "State when the disclosure is being provided relative to care or AI use.",
+    )
+    _add_section_point(
+        section_points,
+        section_sources,
+        DocumentSectionIdEnum.AI_USE_DISCLOSURE,
+        timing_point,
+    )
+
+
 def _build_title_hint(
     document_type: ConsentDocumentTypeEnum,
     audience: ConsentDocumentAudienceEnum,
+    *,
+    uses_patient_consent_template: bool = False,
 ) -> str:
+    if uses_patient_consent_template:
+        return "Patient Consent Form"
+
     audience_label = {
         ConsentDocumentAudienceEnum.PATIENT: "Patient",
         ConsentDocumentAudienceEnum.PERSONAL_REPRESENTATIVE: "Personal Representative",

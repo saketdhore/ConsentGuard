@@ -34,6 +34,27 @@ BIOMETRIC_IDENTIFIERS = {
     "face_geometry",
 }
 
+THERAPY_SERVICE_FUNCTIONS = {
+    "patient_communication_genAI",
+    "clinical_decision_support",
+    "triage_risk_scoring",
+    "treatment_support",
+    "remote_patient_monitoring",
+}
+
+SUPPLEMENTARY_SUPPORT_FUNCTIONS = {
+    "clinical_documentation",
+}
+
+THERAPY_COMMUNICATION_CHANNELS = {
+    "chatbot",
+    "portal_message",
+    "email_letter",
+    "audio",
+    "video",
+    "in_person_support",
+}
+
 
 def _as_bool(value):
     if isinstance(value, bool):
@@ -51,6 +72,12 @@ def _as_list(value):
     if isinstance(value, list):
         return value
     return [value]
+
+
+def _optional_bool(mapping, key):
+    if key not in mapping or mapping.get(key) is None:
+        return None
+    return _as_bool(mapping.get(key))
 
 
 def derive_facts(user_input):
@@ -73,6 +100,8 @@ def derive_facts(user_input):
     decision_type = user_input.get("decision_type")
     content_type = user_input.get("content_type")
     ai_role = user_input.get("ai_role")
+    human_licensed_review = user_input.get("human_licensed_review")
+    communication_channel = user_input.get("communication_channel")
     sensitive_information = user_input.get("sensitive_information")
 
     biometric_identifier_types = {
@@ -135,9 +164,12 @@ def derive_facts(user_input):
         ]
     )
 
+    # Step 3 Question 1 captures whether the workflow uses patient clinical
+    # information. Keep that distinct from the narrower Texas confidentiality
+    # exception for PHI / IIHI, which should only turn on when the intake marks
+    # the information as sensitive/confidential or an explicit override is set.
     handles_phi_or_iihi = any(
         [
-            uses_patient_medical_record,
             sensitive_information == "yes",
             _as_bool(user_input.get("handles_phi_or_iihi")),
         ]
@@ -229,6 +261,159 @@ def derive_facts(user_input):
             _as_bool(user_input.get("is_state_agency_use")),
             facts["is_government_consumer_interaction"],
         ]
+    )
+
+    # Illinois 225 ILCS 155 currently relies on a mix of standardized taxonomy
+    # fields and explicit overrides for statute-specific concepts that the intake
+    # does not yet expose directly (for example, offered-to-the-public status,
+    # peer support, or whether a therapy session was recorded/transcribed).
+    provider_is_physician = _as_bool(user_input.get("provider_is_physician"))
+    explicit_provider_is_licensed_professional = _optional_bool(
+        user_input, "provider_is_licensed_professional"
+    )
+    if explicit_provider_is_licensed_professional is None:
+        provider_is_licensed_professional = entity == "licensed" and not provider_is_physician
+    else:
+        provider_is_licensed_professional = explicit_provider_is_licensed_professional
+
+    explicit_provider_is_unlicensed = _optional_bool(user_input, "provider_is_unlicensed")
+    if explicit_provider_is_unlicensed is None:
+        provider_is_unlicensed = False
+        if entity in {"licensed", "unlicensed"}:
+            provider_is_unlicensed = not provider_is_licensed_professional
+    else:
+        provider_is_unlicensed = explicit_provider_is_unlicensed
+
+    session_recorded_or_transcribed = _as_bool(
+        user_input.get("session_recorded_or_transcribed")
+    )
+    mental_health_service_context = (
+        clinical_domain == "mental_health"
+        and content_type != "administrative_only"
+    )
+    therapy_service_signal = any(
+        [
+            decision_type in {"diagnosis", "triage", "treatment"},
+            function_category in THERAPY_SERVICE_FUNCTIONS,
+            function_category in SUPPLEMENTARY_SUPPORT_FUNCTIONS
+            and session_recorded_or_transcribed,
+            primary_user == "patient"
+            and communication_channel in THERAPY_COMMUNICATION_CHANNELS
+            and function_category == "patient_communication_genAI",
+        ]
+    )
+    is_therapy_or_psychotherapy = any(
+        [
+            _as_bool(user_input.get("is_therapy_or_psychotherapy")),
+            mental_health_service_context and therapy_service_signal,
+        ]
+    )
+    is_religious_counseling = _as_bool(user_input.get("is_religious_counseling"))
+    is_peer_support = _as_bool(user_input.get("is_peer_support"))
+    is_self_help_non_therapy = _as_bool(user_input.get("is_self_help_non_therapy"))
+    is_offered_to_public = _as_bool(user_input.get("is_offered_to_public"))
+    uses_ai_for_administrative_support = any(
+        [
+            _as_bool(user_input.get("uses_ai_for_administrative_support")),
+            function_category == "administrative_only",
+            decision_type == "administrative",
+            content_type == "administrative_only",
+        ]
+    )
+    uses_ai_for_supplementary_support = any(
+        [
+            _as_bool(user_input.get("uses_ai_for_supplementary_support")),
+            function_category in SUPPLEMENTARY_SUPPORT_FUNCTIONS,
+            decision_type == "documentation",
+        ]
+    )
+    licensed_review_present = any(
+        [
+            _as_bool(user_input.get("licensed_review_present")),
+            human_licensed_review == "yes",
+        ]
+    )
+    ai_performs_therapeutic_communication = any(
+        [
+            _as_bool(user_input.get("ai_performs_therapeutic_communication")),
+            is_therapy_or_psychotherapy
+            and primary_user == "patient"
+            and function_category == "patient_communication_genAI"
+            and communication_channel in THERAPY_COMMUNICATION_CHANNELS,
+        ]
+    )
+    ai_detects_emotions_or_mental_states = _as_bool(
+        user_input.get("ai_detects_emotions_or_mental_states")
+    )
+    ai_makes_independent_therapeutic_decisions = any(
+        [
+            _as_bool(user_input.get("ai_makes_independent_therapeutic_decisions")),
+            is_therapy_or_psychotherapy
+            and ai_role == "autonomous"
+            and decision_type in {"diagnosis", "triage", "treatment"},
+        ]
+    )
+    ai_generates_therapeutic_recommendations = any(
+        [
+            _as_bool(user_input.get("ai_generates_therapeutic_recommendations")),
+            is_therapy_or_psychotherapy
+            and ai_role in {"assistive", "substantial_factor", "autonomous"}
+            and function_category
+            in {"clinical_decision_support", "treatment_support", "triage_risk_scoring"},
+        ]
+    )
+    records_or_therapy_communications_exist = any(
+        [
+            _as_bool(user_input.get("records_or_therapy_communications_exist")),
+            uses_patient_medical_record,
+            provider_is_licensed_professional
+            and is_therapy_or_psychotherapy
+            and primary_user == "patient"
+            and communication_channel in THERAPY_COMMUNICATION_CHANNELS,
+        ]
+    )
+    illinois_wopra_exempt_service = any(
+        [
+            is_religious_counseling,
+            is_peer_support,
+            is_self_help_non_therapy,
+        ]
+    )
+
+    facts["is_il"] = jurisdiction == "IL"
+    facts["is_illinois_jurisdiction"] = facts["is_il"]
+    facts["is_therapy_or_psychotherapy"] = is_therapy_or_psychotherapy
+    facts["is_religious_counseling"] = is_religious_counseling
+    facts["is_peer_support"] = is_peer_support
+    facts["is_self_help_non_therapy"] = is_self_help_non_therapy
+    facts["is_offered_to_public"] = is_offered_to_public
+    facts["provider_is_licensed_professional"] = provider_is_licensed_professional
+    facts["provider_is_unlicensed"] = provider_is_unlicensed
+    facts["provider_is_physician"] = provider_is_physician
+    facts["uses_ai_for_administrative_support"] = uses_ai_for_administrative_support
+    facts["uses_ai_for_supplementary_support"] = uses_ai_for_supplementary_support
+    facts["ai_performs_therapeutic_communication"] = (
+        ai_performs_therapeutic_communication
+    )
+    facts["ai_detects_emotions_or_mental_states"] = (
+        ai_detects_emotions_or_mental_states
+    )
+    facts["ai_makes_independent_therapeutic_decisions"] = (
+        ai_makes_independent_therapeutic_decisions
+    )
+    facts["ai_generates_therapeutic_recommendations"] = (
+        ai_generates_therapeutic_recommendations
+    )
+    facts["licensed_review_present"] = licensed_review_present
+    facts["session_recorded_or_transcribed"] = session_recorded_or_transcribed
+    facts["records_or_therapy_communications_exist"] = (
+        records_or_therapy_communications_exist
+    )
+    facts["illinois_wopra_exempt_service"] = illinois_wopra_exempt_service
+    facts["illinois_wopra_applies"] = (
+        facts["is_il"]
+        and facts["is_therapy_or_psychotherapy"]
+        and not facts["illinois_wopra_exempt_service"]
     )
 
     return facts

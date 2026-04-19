@@ -1,0 +1,37 @@
+{
+  "law_id": "IL_225_ILCS_155_ENFORCEMENT",
+  "jurisdiction": "IL",
+  "citation": "225 ILCS 155/30",
+  "act": "Wellness and Oversight for Psychological Resources Act",
+  "effective_date": "upon_becoming_law",
+  "status": "active",
+  "law_type": "enforcement",
+
+  "enforcement": {
+    "primary_enforcer": "Illinois Department of Financial and Professional Regulation",
+    "private_right_of_action": false,
+    "investigation": {
+      "enabled": true,
+      "actor": "Illinois Department of Financial and Professional Regulation",
+      "scope": "actual_alleged_or_suspected_violation",
+      "citation": "225 ILCS 155/30(b)"
+    },
+    "civil_penalties": {
+      "enabled": true,
+      "actor": "Illinois Department of Financial and Professional Regulation",
+      "maximum_per_violation_usd": 10000,
+      "assessment_factors": [
+        "degree_of_harm",
+        "circumstances_of_the_violation"
+      ],
+      "hearing_required": true,
+      "payment_deadline_days": 60,
+      "citation": "225 ILCS 155/30(a)"
+    }
+  },
+
+  "notes": [
+    "The Department may investigate actual, alleged, or suspected violations.",
+    "Civil penalties are capped at $10,000 per violation and are assessed after a hearing."
+  ]
+}

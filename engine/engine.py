@@ -10,6 +10,12 @@ ACTIVE_RULE_TYPES = {
     "general_ai_deployment",
     "consumer_and_healthcare_service_disclosure",
     "licensed_practitioner_diagnostic_use",
+    "therapy_service_ai_compliance",
+}
+
+JURISDICTION_FACT_GATES = {
+    "TX": "is_texas_jurisdiction",
+    "IL": "is_il",
 }
 
 
@@ -37,7 +43,8 @@ def evaluate(user_input, laws_dir, enforcement_dir=None):
 
     matched = []
     for law in laws:
-        if law.get("jurisdiction") == "TX" and not facts.get("is_texas_jurisdiction"):
+        jurisdiction_gate = JURISDICTION_FACT_GATES.get(law.get("jurisdiction"))
+        if jurisdiction_gate and not facts.get(jurisdiction_gate):
             continue
 
         out = eval_law(law, facts)

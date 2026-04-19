@@ -26,6 +26,8 @@ from engine.schemas.common import (
 @dataclass(slots=True)
 class DerivedFactsSchema:
     is_texas_jurisdiction: bool | None = None
+    is_il: bool | None = None
+    is_illinois_jurisdiction: bool | None = None
     is_health_care_practitioner: bool | None = None
     is_licensed_practitioner: bool | None = None
     is_patient_facing: bool | None = None
@@ -45,6 +47,25 @@ class DerivedFactsSchema:
     chapter_552_disclosure_exception: bool | None = None
     chapter_552_disclosure_required: bool | None = None
     requires_state_agency_ai_notice: bool | None = None
+    is_therapy_or_psychotherapy: bool | None = None
+    is_religious_counseling: bool | None = None
+    is_peer_support: bool | None = None
+    is_self_help_non_therapy: bool | None = None
+    is_offered_to_public: bool | None = None
+    provider_is_licensed_professional: bool | None = None
+    provider_is_unlicensed: bool | None = None
+    provider_is_physician: bool | None = None
+    uses_ai_for_administrative_support: bool | None = None
+    uses_ai_for_supplementary_support: bool | None = None
+    ai_performs_therapeutic_communication: bool | None = None
+    ai_detects_emotions_or_mental_states: bool | None = None
+    ai_makes_independent_therapeutic_decisions: bool | None = None
+    ai_generates_therapeutic_recommendations: bool | None = None
+    licensed_review_present: bool | None = None
+    session_recorded_or_transcribed: bool | None = None
+    records_or_therapy_communications_exist: bool | None = None
+    illinois_wopra_exempt_service: bool | None = None
+    illinois_wopra_applies: bool | None = None
 
     def __post_init__(self) -> None:
         for field_name in self.__dataclass_fields__:

@@ -87,6 +87,12 @@ def validate_generated_document(
 
         for point in section_requirement.required_points:
             if not _point_is_represented(point, section_text):
+                if _uses_patient_consent_template(brief) and _patient_consent_point_is_represented(
+                    point=point,
+                    section_id=section_requirement.section_id,
+                    section_text=section_text,
+                ):
+                    continue
                 if not _point_is_represented(point, document_text):
                     missing_points.append(point)
 
@@ -105,6 +111,14 @@ def validate_generated_document(
                 failed_constraints.append(
                     "Affirmative consent is required, but the consent section does not contain recognizable consent language."
                 )
+
+    if _uses_patient_consent_template(brief):
+        _validate_patient_consent_template_sections(
+            document=document,
+            section_map=section_map,
+            failed_constraints=failed_constraints,
+            warnings=warnings,
+        )
 
     if brief.signature_required:
         if document.signature_block is None:
@@ -232,11 +246,110 @@ def _contains_any_keyword(value: str, keywords: set[str]) -> bool:
     return any(keyword in tokens for keyword in keywords)
 
 
+def _uses_patient_consent_template(brief: ConsentDocumentBrief) -> bool:
+    return (
+        brief.document_type.value == "disclosure_and_consent"
+        and brief.audience.value in {"patient", "personal_representative"}
+    )
+
+
+def _validate_patient_consent_template_sections(
+    *,
+    document: GeneratedDocumentSchema,
+    section_map: dict[DocumentSectionIdEnum, object],
+    failed_constraints: list[str],
+    warnings: list[str],
+) -> None:
+    title_text = _normalize_text(document.title)
+    if "consent" not in title_text:
+        warnings.append(
+            "Patient consent forms should normally include 'consent' in the title."
+        )
+
+    ai_use_text = _normalize_text(
+        _text_for_section_id(DocumentSectionIdEnum.AI_USE_DISCLOSURE, section_map, document)
+    )
+    if ai_use_text and not (
+        "artificial intelligence" in ai_use_text or " ai " in f" {ai_use_text} "
+    ):
+        failed_constraints.append(
+            "The AI use disclosure section must clearly state that artificial intelligence is being used."
+        )
+
+    human_review_text = _normalize_text(
+        _text_for_section_id(
+            DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
+            section_map,
+            document,
+        )
+    )
+    if human_review_text and not _contains_any_keyword(
+        human_review_text,
+        {"review", "licensed", "provider", "clinician", "human"},
+    ):
+        failed_constraints.append(
+            "The human review section must describe the role of licensed human review or clearly explain limited review."
+        )
+
+    rights_text = _normalize_text(
+        _text_for_section_id(DocumentSectionIdEnum.PATIENT_RIGHTS, section_map, document)
+    )
+    if rights_text and not _contains_any_phrase(
+        rights_text,
+        {"opt out", "withdraw consent", "withdrawal of consent"},
+    ):
+        failed_constraints.append(
+            "The patient rights section must include opt-out or withdrawal language."
+        )
+
+
+def _patient_consent_point_is_represented(
+    *,
+    point: str,
+    section_id: DocumentSectionIdEnum,
+    section_text: str,
+) -> bool:
+    normalized_point = _normalize_text(point)
+
+    if section_id == DocumentSectionIdEnum.HOW_AI_WAS_USED and _contains_any_phrase(
+        normalized_point,
+        {"data processed", "ai functions", "data are handled"},
+    ):
+        return _contains_any_keyword(
+            section_text,
+            {"data", "processed", "monitoring", "history", "records", "functions", "patterns"},
+        )
+
+    if section_id == DocumentSectionIdEnum.BENEFITS_AND_RISKS:
+        if "benefits" in normalized_point:
+            return _contains_any_keyword(section_text, {"benefit", "benefits"})
+        if "risks" in normalized_point or "limitations" in normalized_point:
+            return _contains_any_keyword(
+                section_text,
+                {"risk", "risks", "limitation", "limitations"},
+            )
+
+    if section_id == DocumentSectionIdEnum.PATIENT_RIGHTS:
+        if "ask questions" in normalized_point:
+            return _contains_any_keyword(section_text, {"question", "questions", "ask"})
+        if _contains_any_phrase(normalized_point, {"opt out", "withdraw consent"}):
+            return _contains_any_phrase(
+                section_text,
+                {"opt out", "withdraw consent", "withdraw"},
+            )
+
+    return False
+
+
 def _unique_strings(values: list[str]) -> list[str]:
     seen: dict[str, None] = {}
     for value in values:
         seen[value] = None
     return list(seen.keys())
+
+
+def _contains_any_phrase(value: str, phrases: set[str]) -> bool:
+    return any(phrase in value for phrase in phrases)
 
 
 __all__ = ["validate_document_against_brief", "validate_generated_document"]
