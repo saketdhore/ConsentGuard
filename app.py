@@ -26,6 +26,25 @@ load_env_file()
 
 # ---------- Config ----------
 LAWS_ROOT = "laws"
+STATUTE_OVERLAY_CHAR_LIMIT = 1200
+STATUTE_SOURCE_FILES = {
+    "TX_BCC_551_002_003": {
+        "path": "Texas Business & Commerce Code §551 (1).txt",
+        "sections": ["551.002", "551.003"],
+    },
+    "TX_BCC_552_051": {
+        "path": "Texas Business & Commerce Code §552.txt",
+        "sections": ["552.051"],
+    },
+    "TX_BCC_503_001": {
+        "path": "Texas Business & Commerce Code §503 (1).txt",
+        "sections": ["503.001"],
+    },
+    "TX_HSC_183_005": {
+        "path": "Texas Health & Safety Code §183.txt",
+        "sections": ["183.005"],
+    },
+}
 
 # ---------- Wizard steps ----------
 TOTAL_STEPS = 12   # 11 form steps (step 1 = jurisdiction+entity) + 1 review
@@ -599,6 +618,149 @@ def format_law_label(law):
     return law_id
 
 
+@st.cache_data(show_spinner=False)
+def _load_statute_text_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return "", []
+    if not lines:
+        return "", []
+    source_url = lines[0].strip()
+    body_lines = lines[1:]
+    return source_url, body_lines
+
+
+def _extract_section_excerpt(body_lines, section_number):
+    if not body_lines:
+        return ""
+    section_pattern = re.compile(
+        rf"^\s*Sec\.\s*{re.escape(section_number)}\.",
+        re.IGNORECASE,
+    )
+    any_section_pattern = re.compile(r"^\s*Sec\.\s*\d+\.\d+\.", re.IGNORECASE)
+    start_idx = None
+    for idx, line in enumerate(body_lines):
+        if section_pattern.search(line):
+            start_idx = idx
+            break
+    if start_idx is None:
+        return ""
+    end_idx = len(body_lines)
+    for idx in range(start_idx + 1, len(body_lines)):
+        if any_section_pattern.search(body_lines[idx]):
+            end_idx = idx
+            break
+    raw_lines = body_lines[start_idx:end_idx]
+    normalized_lines = []
+    for line in raw_lines:
+        compact = re.sub(r"\s+", " ", line).strip()
+        if compact:
+            normalized_lines.append(compact)
+    return "\n".join(normalized_lines).strip()
+
+
+def _build_statute_overlay_payload(law_id):
+    mapping = STATUTE_SOURCE_FILES.get(law_id)
+    if not mapping:
+        return {"source_url": "", "sections": []}
+    source_url, body_lines = _load_statute_text_file(mapping["path"])
+    sections = []
+    for section_number in mapping.get("sections", []):
+        excerpt = _extract_section_excerpt(body_lines, section_number)
+        if excerpt:
+            sections.append({"section": section_number, "text": excerpt})
+    return {"source_url": source_url, "sections": sections}
+
+
+def _build_statute_overlay_html(law_id):
+    payload = _build_statute_overlay_payload(law_id)
+    source_url = payload.get("source_url", "")
+    sections = payload.get("sections", [])
+
+    if not sections:
+        fallback = (
+            "Exact subsection text unavailable. View full statute source."
+            if source_url
+            else "Exact subsection text unavailable."
+        )
+        link_html = (
+            f"<a class='cg-law-source-link' href='{escape(source_url)}' target='_blank' rel='noopener noreferrer'>View Statute Source</a>"
+            if source_url
+            else ""
+        )
+        return (
+            "<div class='cg-law-overlay-body'>"
+            f"<div class='cg-law-fallback'>{escape(fallback)}</div>"
+            f"{link_html}"
+            "</div>"
+        )
+
+    rendered_chunks = []
+    total_chars = 0
+    truncated = False
+    for item in sections:
+        header = f"Section {item['section']}"
+        text = item["text"]
+        remaining = STATUTE_OVERLAY_CHAR_LIMIT - total_chars
+        if remaining <= 0:
+            truncated = True
+            break
+        if len(text) > remaining:
+            text = text[:remaining]
+            truncated = True
+        total_chars += len(text)
+        rendered_chunks.append(
+            "<div class='cg-law-section'>"
+            f"<div class='cg-law-section-header'>{escape(header)}</div>"
+            f"<div class='cg-law-section-text'>{escape(text)}</div>"
+            "</div>"
+        )
+
+    truncation_note = (
+        "<div class='cg-law-truncated'>Excerpt truncated at 1200 characters.</div>"
+        if truncated
+        else ""
+    )
+    link_html = (
+        f"<a class='cg-law-source-link' href='{escape(source_url)}' target='_blank' rel='noopener noreferrer'>View Statute Source</a>"
+        if source_url
+        else ""
+    )
+    return (
+        "<div class='cg-law-overlay-body'>"
+        + "".join(rendered_chunks)
+        + truncation_note
+        + link_html
+        + "</div>"
+    )
+
+
+def build_law_header_with_overlay(law, bullet_prefix=False):
+    law_id = law.get("law_id", "")
+    citation = law.get("citation", "")
+    overlay_html = _build_statute_overlay_html(law_id)
+    code_span = (
+        "<span class='cg-law-code-wrap'>"
+        f"<span class='cg-law-code'>{escape(law_id)}</span>"
+        f"<div class='cg-law-tooltip'>{overlay_html}</div>"
+        "</span>"
+    )
+    if citation:
+        label = f"{code_span} — <span class='cg-law-citation'>{escape(citation)}</span>"
+    else:
+        label = code_span
+    if bullet_prefix:
+        return (
+            "<div class='cg-law-header-line'>"
+            "<span class='cg-law-bullet'>&bull;</span>"
+            f"<span class='cg-law-header-text'>{label}</span>"
+            "</div>"
+        )
+    return f"<div class='cg-law-header-text'>{label}</div>"
+
+
 def collect_obligations(law):
     out = []
     for ob in law.get("applicable_obligations", []):
@@ -613,7 +775,13 @@ def collect_obligations(law):
         if cite:
             pieces.append(f"[{cite}]")
         if reqs:
-            pieces.append(f"(requirements: {', '.join(reqs)})")
+            readable_requirements = [
+                requirement.replace("_", " ").strip()
+                for requirement in reqs
+                if requirement and requirement.strip()
+            ]
+            if readable_requirements:
+                pieces.append(f"(requirements: {', '.join(readable_requirements)})")
 
         out.append(" ".join(pieces))
     return out
@@ -1601,6 +1769,111 @@ st.markdown(
         margin-top: 0.25rem;
         margin-bottom: 0.4rem;
     }
+    .cg-law-code-wrap {
+        position: relative;
+        display: inline-block;
+        padding-right: 3px;
+    }
+    .cg-law-header-line {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.55rem;
+        margin-bottom: 0.1rem;
+    }
+    .cg-law-bullet {
+        color: #0f172a;
+        line-height: 1.2;
+        margin-top: 0.06rem;
+        flex: 0 0 auto;
+    }
+    .cg-law-header-text {
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .cg-law-citation {
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .cg-law-code {
+        border-bottom: 1px dotted #94a3b8;
+        cursor: help;
+    }
+    .cg-law-code-wrap .cg-law-tooltip {
+        display: none;
+        position: absolute;
+        z-index: 1100;
+        left: calc(100% + 1px);
+        top: -4px;
+        width: 520px;
+        max-width: 62vw;
+        max-height: 380px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background: #ffffff;
+        border: 1px solid #d6e3f2;
+        border-radius: 4px;
+        box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
+        padding: 0.6rem 0.7rem;
+    }
+    .cg-law-code-wrap:hover .cg-law-tooltip {
+        display: block;
+    }
+    .cg-law-overlay-body {
+        color: #0f172a;
+        font-weight: 400;
+    }
+    .cg-law-section {
+        padding-bottom: 0.55rem;
+        margin-bottom: 0.55rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .cg-law-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0.3rem;
+    }
+    .cg-law-section-header {
+        font-size: 0.92rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        color: #1e3a8a;
+        margin-bottom: 0.28rem;
+    }
+    .cg-law-section-text {
+        margin: 0;
+        white-space: pre-wrap;
+        font-family: inherit;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        color: #1f2937;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        padding: 0.45rem;
+    }
+    .cg-law-truncated {
+        font-size: 0.74rem;
+        color: #7c2d12;
+        margin: 0.2rem 0 0.45rem 0;
+    }
+    .cg-law-fallback {
+        font-size: 0.8rem;
+        color: #334155;
+        margin-bottom: 0.45rem;
+    }
+    .cg-law-source-link {
+        display: inline-block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #1d4ed8;
+        text-decoration: none;
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+        border-radius: 4px;
+        padding: 0.22rem 0.5rem;
+    }
+    .cg-law-source-link:hover {
+        background: #dbeafe;
+    }
     .stButton > button:focus-visible,
     div[data-baseweb="select"]:focus-within,
     details:focus-within {
@@ -2265,9 +2538,9 @@ if view == "results":
     else:
         with st.expander("Relevant laws (sections that apply)", expanded=True):
             for law in matched:
-                legal_md(
-                    f"- **{format_law_label(law)}**",
-                    skip_terms=terms_defined_in_questions,
+                st.markdown(
+                    build_law_header_with_overlay(law, bullet_prefix=True),
+                    unsafe_allow_html=True,
                 )
 
         with st.expander("Obligations (what you should do)", expanded=True):
@@ -2276,9 +2549,9 @@ if view == "results":
                 obs = collect_obligations(law)
                 if obs:
                     any_ob = True
-                    legal_md(
-                        f"**{format_law_label(law)}**",
-                        skip_terms=terms_defined_in_questions,
+                    st.markdown(
+                        build_law_header_with_overlay(law, bullet_prefix=False),
+                        unsafe_allow_html=True,
                     )
                     for item in dedupe_preserve_order(obs):
                         legal_md(
@@ -2295,9 +2568,9 @@ if view == "results":
                 pbs = collect_prohibitions(law)
                 if pbs:
                     any_pb = True
-                    legal_md(
-                        f"**{format_law_label(law)}**",
-                        skip_terms=terms_defined_in_questions,
+                    st.markdown(
+                        build_law_header_with_overlay(law, bullet_prefix=False),
+                        unsafe_allow_html=True,
                     )
                     for item in dedupe_preserve_order(pbs):
                         legal_md(

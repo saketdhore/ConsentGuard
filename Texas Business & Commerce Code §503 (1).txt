@@ -1,0 +1,74 @@
+https://statutes.capitol.texas.gov/docviewer?DocKey=BC%2Ffile.htm&Phrases=Artificial%7Cintelligence&HighlightType=1&ExactPhrase=False&DocID=%2FSource_TCAS%2FCollection_vwTCAS_idl2%2F%7CBC.503&QueryText=Artificial%20intelligence
+
+BUSINESS AND COMMERCE CODE
+
+TITLE 11.	PERSONAL IDENTITY INFORMATION SUBTITLE A.	IDENTIFYING INFORMATION CHAPTER 503.		BIOMETRIC IDENTIFIERS
+
+Sec.  503.001.	CAPTURE	OR	USE	OF	BIOMETRIC	IDENTIFIER.
+
+(a) In this section:
+
+          (1) "Artificial intelligence system" has the meaning assigned by Section 551.001.
+          (2) "Biometric	identifier"	means	a	retina	or	iris scan, fingerprint, voiceprint, or record of hand or face geometry.
+       (b) A person may not capture a biometric identifier of an individual for a commercial purpose unless the person:
+           (1) informs	the	individual	before	capturing	the biometric identifier; and
+(2) receives the individual 's consent to capture the
+
+biometric identifier.
+
+     (b-1) For purposes of Subsection (b), an individual has not been informed of and has not provided consent for the capture or storage of a biometric identifier of an individual for a commercial purpose based solely on the existence of an image or other media containing one or more biometric identifiers of the individual on the Internet or other publicly available source unless the image or other media was made publicly available by the individual to whom the biometric identifiers relate.
+       (c) A person who possesses a biometric identifier of an individual that is captured for a commercial purpose:
+            (1) may not sell, lease, or otherwise disclose the biometric identifier to another person unless:
+               (A) the individual consents to the disclosure for identification purposes in the event of the individual 's disappearance or death;
+               (B) the disclosure completes a financial transaction that the individual requested or authorized;
+                (C) the disclosure is required or permitted by a federal statute or by a state statute other than Chapter 552, Government Code; or
+
+                (D) the disclosure is made by or to a law enforcement agency for a law enforcement purpose in response to a warrant;
+          (2) shall store, transmit, and protect from disclosure the biometric identifier using reasonable care and in a manner that is the same as or more protective than the manner in which the person stores, transmits, and protects any other confidential information the person possesses; and
+          (3) shall destroy the biometric identifier within a reasonable time, but not later than the first anniversary of the date the purpose for collecting the identifier expires, except as provided by Subsection (c-1).
+     (c-1)  If a biometric identifier of an individual captured for a commercial purpose is used in connection with an instrument or document that is required by another law to be maintained for a period longer than the period prescribed by Subsection (c)(3), the person who possesses the biometric identifier shall destroy the biometric identifier within a reasonable time, but not later than the first anniversary of the date the instrument or document is no longer required to be maintained by law.
+     (c-2) If a biometric identifier captured for a commercial purpose has been collected for security purposes by an employer, the purpose for collecting the identifier under Subsection (c)(3) is presumed to expire on termination of the employment relationship.
+       (d) A person who violates this section is subject to a civil penalty of not more than $25,000 for each violation. The attorney general may bring an action to recover the civil penalty.
+(e) This section does not apply to:
+
+          (1) voiceprint data retained by a financial institution or an affiliate of a financial institution, as those terms are defined by 15 U.S.C. Section 6809;
+          (2) the training, processing, or storage of biometric identifiers involved in developing, training, evaluating, disseminating, or otherwise offering artificial intelligence models or systems, unless a system is used or deployed for the purpose of uniquely identifying a specific individual; or
+
+           (3) the development or deployment of an artificial intelligence model or system for the purposes of:
+               (A) preventing, detecting, protecting against, or responding to security incidents, identity theft, fraud, harassment, malicious or deceptive activities, or any other illegal activity;
+
+
+system; or
+(B) 
+preserving	the	integrity	or	security	of	a
+
+
+(C) investigating,  reporting,  or  prosecuting  a
+
+
+person responsible for a security incident, identity theft, fraud, harassment, a malicious or deceptive activity, or any other illegal activity.
+     (f) If a biometric identifier captured for the purpose of training an artificial intelligence system is subsequently used for a commercial purpose not described by Subsection (e), the person possessing the biometric identifier is subject to:
+(1) this section 's provisions for the possession and
+
+destruction of a biometric identifier; and
+
+(2) the penalties associated with a violation of this
+
+section.
+
+Added by Acts 2007, 80th Leg., R.S., Ch. 885 (H.B. 2278), Sec. 2.01,
+
+eff. April 1, 2009. Amended by:
+Acts 2009, 81st Leg., R.S., Ch. 1163 (H.B. 3186), Sec. 1, eff.
+
+September 1, 2009.
+
+Acts 2017, 85th Leg., R.S., Ch. 913 (S.B. 1343), Sec. 1, eff.
+
+September 1, 2017.
+
+Acts 2025, 89th Leg., R.S., Ch. 1174 (H.B. 149), Sec. 2, eff.
+
+January 1, 2026.
+
+

@@ -1,0 +1,48 @@
+https://statutes.capitol.texas.gov/docviewer?docPath=%2FBC%2Fhtm%2FBC.551.htm
+
+BUSINESS AND COMMERCE CODE
+
+TITLE 11.	PERSONAL IDENTITY INFORMATION SUBTITLE D.	ARTIFICIAL INTELLIGENCE PROTECTION CHAPTER 551.		GENERAL PROVISIONS
+
+Sec.  551.001.	DEFINITIONS.	In this subtitle:
+
+          (1) "Artificial intelligence system" means any machine-based system that, for any explicit or implicit objective, infers from the inputs the system receives how to generate outputs, including content, decisions, predictions, or recommendations, that can influence physical or virtual environments.
+           (2) "Consumer" means an individual who is a resident of  this  state  acting  only  in  an  individual  or household context. The term does not include an individual acting in a commercial or employment context.
+          (3) "Council" means the Texas Artificial Intelligence Council established under Chapter 554.
+Added by Acts 2025, 89th Leg., R.S., Ch. 1174 (H.B. 149), Sec. 4,
+
+eff. January 1, 2026.
+
+
+Sec.  551.002.	APPLICABILITY	OF	SUBTITLE.	This	subtitle
+
+applies only to a person who:
+
+(1) promotes, advertises, or conducts business in this
+
+state;
+
+(2) produces a product or service used by residents of
+
+this state; or
+
+          (3) develops	or	deploys	an	artificial	intelligence system in this state.
+Added by Acts 2025, 89th Leg., R.S., Ch. 1174 (H.B. 149), Sec. 4,
+
+eff. January 1, 2026.
+
+
+Sec.  551.003.	CONSTRUCTION	AND	APPLICATION	OF
+
+SUBTITLE.	This subtitle shall be broadly construed and applied to promote its underlying purposes, which are to:
+         (1) facilitate	and	advance	the	responsible development and use of artificial intelligence systems;
+(2) protect individuals and groups of individuals from
+
+known and reasonably foreseeable risks associated with artificial intelligence systems;
+           (3) provide transparency regarding risks in the development, deployment, and use of artificial intelligence systems; and
+           (4) provide reasonable notice regarding the use or contemplated use of artificial intelligence systems by state agencies.
+Added by Acts 2025, 89th Leg., R.S., Ch. 1174 (H.B. 149), Sec. 4,
+
+eff. January 1, 2026.
+
+
