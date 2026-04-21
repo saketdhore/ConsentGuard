@@ -382,7 +382,47 @@ def build_definition_tooltip_span(display_text, definition, unique_hint=""):
     )
 
 
-def annotate_legal_terms(text, max_per_term=None, skip_terms=None):
+def _replace_texas_with_selected_state(text, selected_state_name):
+    if not text or not selected_state_name:
+        return text
+    text = re.sub(r"\bTexas\b", selected_state_name, text)
+    text = re.sub(r"\btexas\b", selected_state_name.lower(), text)
+    return text
+
+
+def _get_live_selected_jurisdiction():
+    selected = st.session_state.get("form_data", {}).get("jurisdiction")
+    # Step 1 selectbox may be changed before user clicks Next (before form_data persists).
+    live_label = st.session_state.get("step1_jurisdiction")
+    if live_label:
+        jur_labels, jur_to_val = build_jurisdiction_survey_labels()
+        if live_label in jur_labels:
+            live_value = jur_to_val.get(live_label)
+            if live_value is not None:
+                selected = live_value
+    return selected
+
+
+def _resolve_questionnaire_definition(term_key):
+    base = LEGAL_GLOSSARY.get(term_key)
+    if not base:
+        return {
+            "short": "Definition unavailable for selected jurisdiction.",
+            "full": "A generic definition is unavailable for this term in the questionnaire.",
+            "source": "Generic fallback",
+        }
+    selected_jurisdiction = _get_live_selected_jurisdiction()
+    if not selected_jurisdiction:
+        return base
+    state_name = JUR_TO_LABEL.get(selected_jurisdiction, selected_jurisdiction)
+    resolved = dict(base)
+    resolved["short"] = _replace_texas_with_selected_state(resolved.get("short", ""), state_name)
+    resolved["full"] = _replace_texas_with_selected_state(resolved.get("full", ""), state_name)
+    # Keep source/citations unchanged to avoid altering legal references in final law content.
+    return resolved
+
+
+def annotate_legal_terms(text, max_per_term=None, skip_terms=None, questionnaire_mode=False):
     if not text:
         return ""
 
@@ -399,9 +439,14 @@ def annotate_legal_terms(text, max_per_term=None, skip_terms=None):
         if max_per_term == 1 and key in seen_terms:
             return escape(raw)
         seen_terms.add(key)
+        definition = (
+            _resolve_questionnaire_definition(key)
+            if questionnaire_mode
+            else LEGAL_GLOSSARY[key]
+        )
         return build_definition_tooltip_span(
             display_text=raw,
-            definition=LEGAL_GLOSSARY[key],
+            definition=definition,
             unique_hint=f"{match.start()}-{key}",
         )
 
@@ -415,7 +460,12 @@ def legal_md(text, small=False, max_per_term=None, skip_terms=None, track_questi
         known = st.session_state.get("question_defined_terms", set())
         known.update(extract_matched_legal_terms(text))
         st.session_state.question_defined_terms = known
-    body = annotate_legal_terms(text, max_per_term=max_per_term, skip_terms=skip_terms)
+    body = annotate_legal_terms(
+        text,
+        max_per_term=max_per_term,
+        skip_terms=skip_terms,
+        questionnaire_mode=track_question_terms,
+    )
     if small:
         st.markdown(
             f"<div class='cg-caption'>{body}</div>",
