@@ -15,6 +15,7 @@ from engine.schemas import (
     SignatureBlockSchema,
 )
 from engine.schemas.generated_document_schema import DocumentSectionSchema
+from engine.services.patient_consent_template import PATIENT_CONSENT_SECTION_HEADINGS
 from engine.services import validate_generated_document
 
 
@@ -117,6 +118,53 @@ class DocumentValidationServiceTests(unittest.TestCase):
         self.assertEqual(result.missing_sections, [])
         self.assertEqual(result.missing_points, [])
         self.assertEqual(result.failed_constraints, [])
+
+    def test_disclosure_template_semantic_points_validate(self) -> None:
+        brief = make_brief(
+            required_sections=[
+                DocumentSectionIdEnum.PATIENT_INFORMATION,
+                DocumentSectionIdEnum.INTRODUCTION,
+            ],
+            section_points={
+                DocumentSectionIdEnum.PATIENT_INFORMATION: [
+                    "Use the supplied patient, provider, and practice identifiers where available."
+                ],
+                DocumentSectionIdEnum.INTRODUCTION: [
+                    "Introduce why the recipient is receiving this AI disclosure or consent document."
+                ],
+            },
+        )
+        document = make_document(
+            brief,
+            sections=[
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.PATIENT_INFORMATION,
+                    order=1,
+                    heading="Your Information",
+                    body=(
+                        "This notice applies to Jordan Miller (DOB: 08/14/2000, "
+                        "Medical Record Number: MRN-204851).\n"
+                        "Practice: Dallas Remote Care Clinic.\n"
+                        "Provider: Nurse Care Team, supervised by Dr. Maya Patel."
+                    ),
+                ),
+                DocumentSectionSchema(
+                    section_id=DocumentSectionIdEnum.INTRODUCTION,
+                    order=2,
+                    heading="Why you are receiving this notice",
+                    body=(
+                        "You are receiving health care services that include remote "
+                        "monitoring support. This notice explains how we use an "
+                        "artificial intelligence system in your care process."
+                    ),
+                ),
+            ],
+        )
+
+        result = validate_generated_document(brief, document)
+
+        self.assertTrue(result.is_valid)
+        self.assertEqual(result.missing_points, [])
 
     def test_missing_disclosure_section(self) -> None:
         brief = make_brief(
@@ -268,31 +316,49 @@ class DocumentValidationServiceTests(unittest.TestCase):
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.PATIENT_INFORMATION,
                     order=1,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.PATIENT_INFORMATION
+                    ],
                     body="Patient Name: Jane Doe\nDate of Birth: 1990-01-01\nProvider Name: Dr. Rivera",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.INTRODUCTION,
                     order=2,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.INTRODUCTION
+                    ],
                     body="North Clinic uses an AI system as part of the patient's care.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.AI_USE_DISCLOSURE,
                     order=3,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.AI_USE_DISCLOSURE
+                    ],
                     body="Artificial intelligence is used as part of this healthcare service.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
                     order=4,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT
+                    ],
                     body="A licensed clinician reviews AI outputs and makes the final decision.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.PATIENT_RIGHTS,
                     order=5,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.PATIENT_RIGHTS
+                    ],
                     body="You may ask questions about AI use in your care.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
                     order=6,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT
+                    ],
                     body="I consent to the AI use described above.",
                 ),
             ],
@@ -360,31 +426,49 @@ class DocumentValidationServiceTests(unittest.TestCase):
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.PATIENT_INFORMATION,
                     order=1,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.PATIENT_INFORMATION
+                    ],
                     body="Patient Name: Jane Doe\nDate of Birth: 1990-01-01\nMedical Record Number: 1001\nProvider Name: Dr. Rivera\nPractice Name: North Clinic\nDate: 2026-04-19",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.INTRODUCTION,
                     order=2,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.INTRODUCTION
+                    ],
                     body="North Clinic uses an AI system as part of the patient's care.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.AI_USE_DISCLOSURE,
                     order=3,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.AI_USE_DISCLOSURE
+                    ],
                     body="Artificial intelligence is used as part of this healthcare service and supports, but does not replace, licensed professionals.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.HOW_AI_WAS_USED,
                     order=4,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.HOW_AI_WAS_USED
+                    ],
                     body="The AI reviews submitted monitoring data and summarizes patterns for clinician review.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT,
                     order=5,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT
+                    ],
                     body="A licensed clinician reviews AI outputs and makes the final care decision.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.BENEFITS_AND_RISKS,
                     order=6,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.BENEFITS_AND_RISKS
+                    ],
                     body="Benefits and risks are summarized below.",
                     bullets=[
                         "Benefit: faster identification of issues",
@@ -394,11 +478,17 @@ class DocumentValidationServiceTests(unittest.TestCase):
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.PATIENT_RIGHTS,
                     order=7,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.PATIENT_RIGHTS
+                    ],
                     body="You may ask questions, opt out, or withdraw consent without losing access to standard care.",
                 ),
                 DocumentSectionSchema(
                     section_id=DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT,
                     order=8,
+                    heading=PATIENT_CONSENT_SECTION_HEADINGS[
+                        DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT
+                    ],
                     body="I have read and understood this form and consent to the AI use described above.",
                 ),
             ],

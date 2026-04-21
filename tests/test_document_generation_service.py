@@ -188,8 +188,8 @@ class DocumentGenerationServiceTests(unittest.TestCase):
                 {
                     "section_id": "patient_rights",
                     "order": 7,
-                    "heading": "6. Your Rights",
-                    "body": "You may opt out at any time and ask questions about AI use in your care.",
+                    "heading": "Patient choices",
+                    "body": "You may ask questions about AI use in your care.",
                     "bullets": [],
                     "source_requirement_ids": ["req-1"],
                 },
@@ -198,6 +198,14 @@ class DocumentGenerationServiceTests(unittest.TestCase):
                     "order": 8,
                     "heading": "Consent",
                     "body": "I consent to this AI-assisted step before it occurs.",
+                    "bullets": [],
+                    "source_requirement_ids": ["req-1"],
+                },
+                {
+                    "section_id": "footer_notes",
+                    "order": 9,
+                    "heading": "Extra model-added section",
+                    "body": "This section should be dropped for canonical patient consent forms.",
                     "bullets": [],
                     "source_requirement_ids": ["req-1"],
                 },
@@ -222,12 +230,30 @@ class DocumentGenerationServiceTests(unittest.TestCase):
 
         self.assertEqual(document.title, "Patient Consent Form")
         self.assertEqual(len(document.sections), 8)
+        self.assertEqual(
+            [section.heading for section in document.sections],
+            [
+                "Patient Information",
+                "1. Introduction to AI Use in Your Care",
+                "2. AI Use Disclosure",
+                "3. How the AI System Works",
+                "4. Human Review Statement",
+                "5. Benefits and Risks",
+                "6. Your Rights and Opt-Out Options",
+                "Consent",
+            ],
+        )
+        patient_rights = document.sections[6]
+        self.assertTrue(
+            any("opt out" in bullet.lower().replace("-", " ") for bullet in patient_rights.bullets)
+        )
         provider.generate_structured_json.assert_called_once()
         call_kwargs = provider.generate_structured_json.call_args.kwargs
         self.assertEqual(call_kwargs["schema_name"], "generated_document")
         self.assertIn("Base consent template text.", call_kwargs["input_text"])
         self.assertIn("patient_consent_form_v1", call_kwargs["input_text"])
         self.assertIn("1. Introduction to AI Use in Your Care", call_kwargs["input_text"])
+        self.assertIn("Your Rights and Opt-Out Options", call_kwargs["input_text"])
 
     def test_patient_consent_brief_includes_canonical_template_payload(self) -> None:
         brief = make_brief(
@@ -275,6 +301,14 @@ class DocumentGenerationServiceTests(unittest.TestCase):
         self.assertEqual(
             payload["canonical_template"]["sections"][1]["heading"],
             "1. Introduction to AI Use in Your Care",
+        )
+        self.assertEqual(
+            payload["canonical_template"]["sections"][6]["heading"],
+            "6. Your Rights and Opt-Out Options",
+        )
+        self.assertEqual(
+            payload["canonical_template"]["output_contract"]["sections"][6]["heading"],
+            "6. Your Rights and Opt-Out Options",
         )
         self.assertEqual(
             payload["canonical_template"]["sections"][0]["field_values"]["Patient Name"],

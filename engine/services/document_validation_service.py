@@ -8,6 +8,7 @@ from engine.schemas.consent_brief_schema import ConsentDocumentBrief
 from engine.schemas.document_validation_schema import DocumentValidationResultSchema
 from engine.schemas.generated_document_schema import GeneratedDocumentSchema
 from engine.schemas.common import DocumentSectionIdEnum
+from engine.services.patient_consent_template import PATIENT_CONSENT_SECTION_HEADINGS
 
 _STOPWORDS = {
     "a",
@@ -87,6 +88,12 @@ def validate_generated_document(
 
         for point in section_requirement.required_points:
             if not _point_is_represented(point, section_text):
+                if _section_semantic_point_is_represented(
+                    point=point,
+                    section_id=section_requirement.section_id,
+                    section_text=section_text,
+                ):
+                    continue
                 if _uses_patient_consent_template(brief) and _patient_consent_point_is_represented(
                     point=point,
                     section_id=section_requirement.section_id,
@@ -195,6 +202,14 @@ def _section_text(section: object) -> str:
     return " ".join([heading, body, *bullets]).strip()
 
 
+def _section_content_text(section: object) -> str:
+    if section is None:
+        return ""
+    body = getattr(section, "body", None) or ""
+    bullets = getattr(section, "bullets", None) or []
+    return " ".join([body, *bullets]).strip()
+
+
 def _document_text(document: GeneratedDocumentSchema) -> str:
     section_text = " ".join(_section_text(section) for section in document.sections)
     signature_text = ""
@@ -266,6 +281,18 @@ def _validate_patient_consent_template_sections(
             "Patient consent forms should normally include 'consent' in the title."
         )
 
+    for section_id, expected_heading in PATIENT_CONSENT_SECTION_HEADINGS.items():
+        if section_id == DocumentSectionIdEnum.SIGNATURE_BLOCK:
+            continue
+        section = section_map.get(section_id)
+        if section is None:
+            continue
+        actual_heading = getattr(section, "heading", None)
+        if actual_heading != expected_heading:
+            failed_constraints.append(
+                f"Patient consent section '{section_id.value}' must use the canonical heading '{expected_heading}'."
+            )
+
     ai_use_text = _normalize_text(
         _text_for_section_id(DocumentSectionIdEnum.AI_USE_DISCLOSURE, section_map, document)
     )
@@ -292,7 +319,7 @@ def _validate_patient_consent_template_sections(
         )
 
     rights_text = _normalize_text(
-        _text_for_section_id(DocumentSectionIdEnum.PATIENT_RIGHTS, section_map, document)
+        _section_content_text(section_map.get(DocumentSectionIdEnum.PATIENT_RIGHTS))
     )
     if rights_text and not _contains_any_phrase(
         rights_text,
@@ -337,6 +364,73 @@ def _patient_consent_point_is_represented(
                 section_text,
                 {"opt out", "withdraw consent", "withdraw"},
             )
+
+    return False
+
+
+def _section_semantic_point_is_represented(
+    *,
+    point: str,
+    section_id: DocumentSectionIdEnum,
+    section_text: str,
+) -> bool:
+    """Handle stable brief requirements that generated prose may satisfy indirectly."""
+
+    normalized_point = _normalize_text(point)
+
+    if (
+        section_id == DocumentSectionIdEnum.PATIENT_INFORMATION
+        and "patient" in normalized_point
+        and "provider" in normalized_point
+        and "practice" in normalized_point
+        and "identifier" in normalized_point
+    ):
+        has_patient_identifier = _contains_any_phrase(
+            section_text,
+            {
+                "patient name",
+                "date of birth",
+                "dob",
+                "medical record",
+                "mrn",
+            },
+        )
+        has_care_team_identifier = _contains_any_keyword(
+            section_text,
+            {"provider", "practice", "clinic", "physician", "doctor", "dr"},
+        )
+        return has_patient_identifier and has_care_team_identifier
+
+    if (
+        section_id == DocumentSectionIdEnum.INTRODUCTION
+        and "recipient" in normalized_point
+        and "receiving" in normalized_point
+        and (
+            "disclosure" in normalized_point
+            or "consent" in normalized_point
+            or "document" in normalized_point
+        )
+    ):
+        explains_notice = _contains_any_phrase(
+            section_text,
+            {
+                "why you are receiving",
+                "you are receiving",
+                "this notice explains",
+                "this disclosure explains",
+                "this document explains",
+                "this form explains",
+            },
+        )
+        has_document_context = _contains_any_keyword(
+            section_text,
+            {"notice", "disclosure", "document", "form"},
+        )
+        has_ai_or_care_context = _contains_any_keyword(
+            section_text,
+            {"ai", "artificial", "care", "service", "healthcare", "monitoring"},
+        )
+        return explains_notice and has_document_context and has_ai_or_care_context
 
     return False
 

@@ -17,6 +17,12 @@ from engine.schemas.common import (
 )
 from engine.schemas.consent_brief_schema import ConsentDocumentBrief
 from engine.schemas.generated_document_schema import GeneratedDocumentSchema
+from engine.services.patient_consent_template import (
+    PATIENT_CONSENT_SECTION_HEADINGS,
+    PATIENT_CONSENT_SECTION_ORDER,
+    PATIENT_CONSENT_TEMPLATE_ID,
+    PATIENT_CONSENT_TITLE,
+)
 
 
 class DocumentGenerationError(RuntimeError):
@@ -61,6 +67,13 @@ def generate_document_from_brief(
     if not isinstance(response_payload, dict):
         raise DocumentGenerationError(
             "Document generation provider returned a non-object response."
+        )
+
+    if _uses_patient_consent_template(brief):
+        response_payload = _normalize_patient_consent_response_payload(
+            payload=response_payload,
+            brief=brief,
+            case_facts=case_facts,
         )
 
     try:
@@ -117,13 +130,17 @@ def _build_generation_instructions() -> str:
         "Do not add sections that are not supported by the brief. "
         "Use the brief's required sections, required points, drafting constraints, timing rule, "
         "and signature requirements. Keep source_law_ids and source_requirement_ids aligned to the brief. "
-        "When canonical_template is present, use it as the base output structure and keep its section headings "
-        "and overall organization clearly recognizable. "
+        "When canonical_template is present, treat canonical_template.output_contract as mandatory: "
+        "use the exact title, exact section_id order, and exact section.heading strings supplied there. "
+        "Do not rename, renumber, merge, split, or add sections. Do not create a section for signature_block; "
+        "populate the top-level signature_block field instead. "
         "Treat canonical_template internal guidance as drafting guidance, not as boilerplate that must be copied verbatim. "
         "Fill available factual fields from case_facts and canonical_template field values. "
         "When a factual field is unavailable, use a neutral placeholder such as '[Not provided]' or comparable "
         "professional placeholder instead of omitting the field entirely. "
         "When the brief requires consent, include explicit consent language in the consent_or_acknowledgment section. "
+        "When a patient_rights section is required, its fixed heading must include opt-out language and its body or "
+        "bullets must explain opt-out or withdrawal rights and standard-care alternatives. "
         "When the brief or canonical_template calls for human review, describe the role of licensed human review clearly. "
         "If the facts indicate autonomous or limited-review AI, use stronger cautionary wording instead of overstating human review. "
         "When the brief requires a signature block, populate signature_block. "
@@ -360,9 +377,57 @@ def _build_patient_consent_template_payload(
         "If you prefer not to use AI-supported services, we can discuss reasonable clinician-led or standard-care alternatives when available.",
     )
 
+    template_sections = _build_patient_consent_template_sections(
+        case_facts=case_facts,
+        signer_label=signer_label,
+        practice_name=practice_name,
+        provider_name=provider_name,
+        ai_system_name=ai_system_name,
+        patient_name=patient_name,
+        date_of_birth=date_of_birth,
+        medical_record_number=medical_record_number,
+        document_date=document_date,
+        ai_use_purpose=ai_use_purpose,
+        ai_role_description=ai_role_description,
+        decision_description=decision_description,
+        data_processed=data_processed,
+        additional_use_description=additional_use_description,
+        human_review_description=human_review_description,
+        alternatives_description=alternatives_description,
+    )
+    output_sections = [
+        {
+            "section_id": section["section_id"],
+            "order": index,
+            "heading": section["heading"],
+        }
+        for index, section in enumerate(
+            [
+                section
+                for section in template_sections
+                if section["section_id"] != DocumentSectionIdEnum.SIGNATURE_BLOCK.value
+                and DocumentSectionIdEnum(section["section_id"]) in brief.required_sections
+            ],
+            start=1,
+        )
+    ]
+
     return {
-        "template_id": "patient_consent_form_v1",
-        "title": "Patient Consent Form",
+        "template_id": PATIENT_CONSENT_TEMPLATE_ID,
+        "title": PATIENT_CONSENT_TITLE,
+        "output_contract": {
+            "strict": True,
+            "title": PATIENT_CONSENT_TITLE,
+            "sections": output_sections,
+            "signature_block_required": brief.signature_required,
+            "signature_block_heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.SIGNATURE_BLOCK
+            ],
+            "instruction": (
+                "Use exactly these section IDs, orders, and headings in the generated JSON. "
+                "Do not add, remove, rename, renumber, split, or merge sections."
+            ),
+        },
         "missing_field_policy": (
             "Use neutral placeholders when patient-, provider-, or system-specific details are unavailable."
         ),
@@ -388,116 +453,335 @@ def _build_patient_consent_template_payload(
             "diagnosis_or_treatment_planning_context": _is_diagnostic_or_treatment_context(case_facts),
             "model_training_use_described": bool(case_facts.model_training_use_description),
         },
-        "sections": [
-            {
-                "section_id": DocumentSectionIdEnum.PATIENT_INFORMATION.value,
-                "heading": "Patient Information",
-                "field_values": {
-                    "Patient Name": patient_name,
-                    "Date of Birth": date_of_birth,
-                    "Medical Record Number": medical_record_number,
-                    "Provider Name": provider_name,
-                    "Practice Name": practice_name,
-                    "Date": document_date,
-                },
+        "required_heading_policy": (
+            "Generated patient consent forms must use these exact headings. "
+            "The patient rights heading must remain '6. Your Rights and Opt-Out Options'."
+        ),
+        "sections": template_sections,
+    }
+
+
+def _build_patient_consent_template_sections(
+    *,
+    case_facts: CaseFactsSchema,
+    signer_label: str,
+    practice_name: str,
+    provider_name: str,
+    ai_system_name: str,
+    patient_name: str,
+    date_of_birth: str,
+    medical_record_number: str,
+    document_date: str,
+    ai_use_purpose: str,
+    ai_role_description: str,
+    decision_description: str,
+    data_processed: str,
+    additional_use_description: str,
+    human_review_description: str,
+    alternatives_description: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "section_id": DocumentSectionIdEnum.PATIENT_INFORMATION.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.PATIENT_INFORMATION
+            ],
+            "field_values": {
+                "Patient Name": patient_name,
+                "Date of Birth": date_of_birth,
+                "Medical Record Number": medical_record_number,
+                "Provider Name": provider_name,
+                "Practice Name": practice_name,
+                "Date": document_date,
             },
-            {
-                "section_id": DocumentSectionIdEnum.INTRODUCTION.value,
-                "heading": "1. Introduction to AI Use in Your Care",
-                "field_values": {
-                    "Practice Name": practice_name,
-                    "AI System Name": ai_system_name,
-                    "AI Use Purpose": ai_use_purpose,
-                },
-                "suggested_body": (
-                    f"{practice_name} would like to inform you that we use an artificial intelligence "
-                    f"(AI) system called {ai_system_name} as part of your care. The goal of this "
-                    f"AI-supported workflow is to {ai_use_purpose}."
+        },
+        {
+            "section_id": DocumentSectionIdEnum.INTRODUCTION.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.INTRODUCTION
+            ],
+            "field_values": {
+                "Practice Name": practice_name,
+                "AI System Name": ai_system_name,
+                "AI Use Purpose": ai_use_purpose,
+            },
+            "suggested_body": (
+                f"{practice_name} would like to inform you that we use an artificial intelligence "
+                f"(AI) system called {ai_system_name} as part of your care. The goal of this "
+                f"AI-supported workflow is to {ai_use_purpose}."
+            ),
+        },
+        {
+            "section_id": DocumentSectionIdEnum.AI_USE_DISCLOSURE.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.AI_USE_DISCLOSURE
+            ],
+            "field_values": {
+                "AI Role Description": ai_role_description,
+                "Decision Description": decision_description,
+            },
+            "suggested_body": (
+                "We use AI as part of your healthcare service. The AI system supports, but does "
+                f"not replace, licensed healthcare professionals. In this workflow, the AI is used "
+                f"in a {ai_role_description} role and is involved in {decision_description}."
+            ),
+        },
+        {
+            "section_id": DocumentSectionIdEnum.HOW_AI_WAS_USED.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.HOW_AI_WAS_USED
+            ],
+            "field_values": {
+                "Data Processed": data_processed,
+                "Additional AI Use Description": additional_use_description,
+                "Model Training Use Disclosure": _placeholder_text(
+                    case_facts.model_training_use_description,
+                    "No separate model-building or training use was provided.",
                 ),
             },
-            {
-                "section_id": DocumentSectionIdEnum.AI_USE_DISCLOSURE.value,
-                "heading": "2. AI Use Disclosure",
-                "field_values": {
-                    "AI Role Description": ai_role_description,
-                    "Decision Description": decision_description,
-                },
-                "suggested_body": (
-                    "We use AI as part of your healthcare service. The AI system supports, but does "
-                    f"not replace, licensed healthcare professionals. In this workflow, the AI is used "
-                    f"in a {ai_role_description} role and is involved in {decision_description}."
-                ),
+            "suggested_body": (
+                f"Data Processed: {data_processed}. AI Functions: {additional_use_description}"
+            ),
+        },
+        {
+            "section_id": DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT
+            ],
+            "field_values": {
+                "Human Review Description": human_review_description,
             },
-            {
-                "section_id": DocumentSectionIdEnum.HOW_AI_WAS_USED.value,
-                "heading": "3. How the AI System Works",
-                "field_values": {
-                    "Data Processed": data_processed,
-                    "Additional AI Use Description": additional_use_description,
-                    "Model Training Use Disclosure": _placeholder_text(
-                        case_facts.model_training_use_description,
-                        "No separate model-building or training use was provided.",
-                    ),
-                },
-                "suggested_body": (
-                    f"Data Processed: {data_processed}. AI Functions: {additional_use_description}"
-                ),
-            },
-            {
-                "section_id": DocumentSectionIdEnum.HUMAN_REVIEW_STATEMENT.value,
-                "heading": "4. Human Review Statement",
-                "field_values": {
-                    "Human Review Description": human_review_description,
-                },
-                "suggested_body": human_review_description,
-            },
-            {
-                "section_id": DocumentSectionIdEnum.BENEFITS_AND_RISKS.value,
-                "heading": "5. Benefits and Risks",
-                "suggested_bullets": {
-                    "benefits": [
-                        "Faster identification of potential health issues",
-                        "Improved monitoring, communication, or care coordination where applicable",
-                    ],
-                    "risks": [
-                        "The AI system may generate inaccurate or incomplete suggestions",
-                        "The system depends on the quality of the data provided",
-                        "Technical limitations may affect performance",
-                    ],
-                },
-            },
-            {
-                "section_id": DocumentSectionIdEnum.PATIENT_RIGHTS.value,
-                "heading": "6. Your Rights",
-                "field_values": {
-                    "Opt-Out Alternatives": alternatives_description,
-                },
-                "suggested_bullets": [
-                    "You may ask questions about how AI is being used in your treatment.",
-                    "You may opt out of AI-supported services at any time without affecting access to standard care.",
-                    "Your decision about AI use is voluntary.",
-                    alternatives_description,
+            "suggested_body": human_review_description,
+        },
+        {
+            "section_id": DocumentSectionIdEnum.BENEFITS_AND_RISKS.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.BENEFITS_AND_RISKS
+            ],
+            "suggested_bullets": {
+                "benefits": [
+                    "Faster identification of potential health issues",
+                    "Improved monitoring, communication, or care coordination where applicable",
+                ],
+                "risks": [
+                    "The AI system may generate inaccurate or incomplete suggestions",
+                    "The system depends on the quality of the data provided",
+                    "Technical limitations may affect performance",
                 ],
             },
-            {
-                "section_id": DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT.value,
-                "heading": "Consent",
-                "suggested_body": (
-                    "By signing below, you acknowledge that you have read and understood this form, "
-                    "understand how AI will be used in your care, and voluntarily consent to the AI "
-                    "use described above."
-                ),
+        },
+        {
+            "section_id": DocumentSectionIdEnum.PATIENT_RIGHTS.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.PATIENT_RIGHTS
+            ],
+            "field_values": {
+                "Opt-Out Alternatives": alternatives_description,
             },
-            {
-                "section_id": DocumentSectionIdEnum.SIGNATURE_BLOCK.value,
-                "heading": "Signature Block",
-                "field_values": {
-                    "Signer Label": signer_label,
-                    "Date Label": "Date",
-                },
+            "suggested_bullets": [
+                "You may ask questions about how AI is being used in your treatment.",
+                "You may opt out of AI-supported services at any time without affecting access to standard care.",
+                "Your decision about AI use is voluntary.",
+                alternatives_description,
+            ],
+        },
+        {
+            "section_id": DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.CONSENT_OR_ACKNOWLEDGMENT
+            ],
+            "suggested_body": (
+                "By signing below, you acknowledge that you have read and understood this form, "
+                "understand how AI will be used in your care, and voluntarily consent to the AI "
+                "use described above."
+            ),
+        },
+        {
+            "section_id": DocumentSectionIdEnum.SIGNATURE_BLOCK.value,
+            "heading": PATIENT_CONSENT_SECTION_HEADINGS[
+                DocumentSectionIdEnum.SIGNATURE_BLOCK
+            ],
+            "field_values": {
+                "Signer Label": signer_label,
+                "Date Label": "Date",
             },
-        ],
+        },
+    ]
+
+
+def _normalize_patient_consent_response_payload(
+    *,
+    payload: dict[str, Any],
+    brief: ConsentDocumentBrief,
+    case_facts: CaseFactsSchema,
+) -> dict[str, Any]:
+    """Enforce the canonical patient consent structure after model generation."""
+
+    normalized = dict(payload)
+    template_payload = _build_patient_consent_template_payload(brief, case_facts)
+    template_sections_by_id = {
+        section["section_id"]: section for section in template_payload["sections"]
     }
+    existing_sections_by_id: dict[str, dict[str, Any]] = {}
+    for section in payload.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        section_id = section.get("section_id")
+        if section_id in template_sections_by_id and section_id not in existing_sections_by_id:
+            existing_sections_by_id[section_id] = section
+
+    required_section_ids = set(brief.required_sections)
+    output_section_ids = [
+        section_id
+        for section_id in PATIENT_CONSENT_SECTION_ORDER
+        if section_id != DocumentSectionIdEnum.SIGNATURE_BLOCK
+        and section_id in required_section_ids
+    ]
+
+    normalized["document_type"] = _enum_value(brief.document_type)
+    normalized["audience"] = _enum_value(brief.audience)
+    normalized["jurisdiction"] = _enum_value(brief.jurisdiction)
+    normalized["title"] = PATIENT_CONSENT_TITLE
+    normalized["sections"] = [
+        _normalize_patient_consent_section(
+            existing_section=existing_sections_by_id.get(section_id.value, {}),
+            template_section=template_sections_by_id[section_id.value],
+            section_id=section_id,
+            order=index,
+            brief=brief,
+        )
+        for index, section_id in enumerate(output_section_ids, start=1)
+    ]
+    normalized["source_law_ids"] = list(brief.source_law_ids)
+    normalized["source_requirement_ids"] = list(brief.source_requirement_ids)
+    if brief.signature_required:
+        normalized["signature_block"] = _normalize_patient_consent_signature_block(
+            payload.get("signature_block"),
+            template_sections_by_id[DocumentSectionIdEnum.SIGNATURE_BLOCK.value],
+            brief,
+        )
+    else:
+        normalized["signature_block"] = None
+    return normalized
+
+
+def _normalize_patient_consent_section(
+    *,
+    existing_section: dict[str, Any],
+    template_section: dict[str, Any],
+    section_id: DocumentSectionIdEnum,
+    order: int,
+    brief: ConsentDocumentBrief,
+) -> dict[str, Any]:
+    body = _normalized_optional_string(existing_section.get("body"))
+    bullets = _normalized_string_list(existing_section.get("bullets"))
+    if body is None and not bullets:
+        body, bullets = _fallback_patient_consent_section_content(
+            section_id,
+            template_section,
+        )
+
+    if section_id == DocumentSectionIdEnum.PATIENT_RIGHTS and not _has_opt_out_text(
+        body,
+        bullets,
+    ):
+        bullets.append(
+            "You may opt out of AI-supported services at any time without affecting access to standard care."
+        )
+
+    return {
+        "section_id": section_id.value,
+        "order": order,
+        "heading": PATIENT_CONSENT_SECTION_HEADINGS[section_id],
+        "body": body,
+        "bullets": bullets,
+        "source_requirement_ids": _source_requirement_ids_for_section(brief, section_id),
+    }
+
+
+def _fallback_patient_consent_section_content(
+    section_id: DocumentSectionIdEnum,
+    template_section: dict[str, Any],
+) -> tuple[str | None, list[str]]:
+    if section_id == DocumentSectionIdEnum.PATIENT_INFORMATION:
+        field_values = template_section.get("field_values")
+        if isinstance(field_values, dict):
+            return "\n".join(f"{label}: {value}" for label, value in field_values.items()), []
+
+    suggested_body = _normalized_optional_string(template_section.get("suggested_body"))
+    if suggested_body is not None:
+        return suggested_body, []
+
+    suggested_bullets = template_section.get("suggested_bullets")
+    if isinstance(suggested_bullets, dict):
+        bullets: list[str] = []
+        for group_label, group_items in suggested_bullets.items():
+            if isinstance(group_items, list):
+                for item in group_items:
+                    if isinstance(item, str) and item.strip():
+                        bullets.append(f"{group_label.title()}: {item.strip()}")
+        return "Benefits and risks include:", bullets
+
+    if isinstance(suggested_bullets, list):
+        bullets = [item.strip() for item in suggested_bullets if isinstance(item, str) and item.strip()]
+        return "Your rights and opt-out options include:", bullets
+
+    return "[Not provided]", []
+
+
+def _normalize_patient_consent_signature_block(
+    existing_signature_block: object,
+    template_signature_section: dict[str, Any],
+    brief: ConsentDocumentBrief,
+) -> dict[str, Any]:
+    existing = existing_signature_block if isinstance(existing_signature_block, dict) else {}
+    field_values = template_signature_section.get("field_values")
+    signer_label = None
+    if isinstance(field_values, dict):
+        signer_label = _normalized_optional_string(field_values.get("Signer Label"))
+
+    return {
+        "signer_label": _normalized_optional_string(existing.get("signer_label"))
+        or signer_label
+        or "Patient Signature",
+        "signature_required": True,
+        "date_required": existing.get("date_required")
+        if isinstance(existing.get("date_required"), bool)
+        else True,
+        "affirmative_consent_required": brief.affirmative_consent_required,
+        "acknowledgment_text": _normalized_optional_string(
+            existing.get("acknowledgment_text")
+        )
+        or "By signing, you acknowledge and consent to the AI use described in this form.",
+    }
+
+
+def _source_requirement_ids_for_section(
+    brief: ConsentDocumentBrief,
+    section_id: DocumentSectionIdEnum,
+) -> list[str]:
+    for requirement in brief.section_requirements:
+        if requirement.section_id == section_id and requirement.source_item_ids:
+            return list(requirement.source_item_ids)
+    return list(brief.source_requirement_ids)
+
+
+def _normalized_optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalized_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _has_opt_out_text(body: str | None, bullets: list[str]) -> bool:
+    text = " ".join([body or "", *bullets]).lower().replace("-", " ")
+    return "opt out" in text or "withdraw consent" in text
 
 
 def _placeholder_text(value: str | None, placeholder: str) -> str:
